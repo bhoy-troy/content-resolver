@@ -856,7 +856,7 @@ class ConfigManager:
             document_id = yml_file.split(".yaml")[0]
 
             try:
-                with open(os.path.join(directory, yml_file), "r") as file:
+                with open(os.path.join(directory, yml_file)) as file:
                     # Safely load the config
                     try:
                         document = yaml.safe_load(file)

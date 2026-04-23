@@ -15,7 +15,7 @@ class SetEncoder(json.JSONEncoder):
 
 
 def load_data(path):
-    with open(path, 'r') as file:
+    with open(path) as file:
         data = json.load(file)
     return data
 

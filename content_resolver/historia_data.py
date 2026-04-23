@@ -110,7 +110,7 @@ def _read_historic_data(query):
     historic_data = {}
 
     for filename in valid_filenames:
-        with open(os.path.join(directory, filename), "r") as file:
+        with open(os.path.join(directory, filename)) as file:
             try:
                 document = json.load(file)
 
