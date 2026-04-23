@@ -888,7 +888,7 @@ class Analyzer():
                         repo=repo["id"],
                         arch=arch
                     ))
-                err_log("  - {err}".format(err=err))
+                err_log(f"  - {err}")
                 env["succeeded"] = False
                 env["errors"]["message"] = str(err)
                 return env
@@ -905,7 +905,7 @@ class Analyzer():
                         repo=repo["id"],
                         arch=arch
                     ))
-                err_log("  - {err}".format(err=err))
+                err_log(f"  - {err}")
                 env["succeeded"] = False
                 env["errors"]["message"] = str(err)
                 return env
@@ -919,7 +919,7 @@ class Analyzer():
                         repo=repo["id"],
                         arch=arch
                     ))
-                err_log("  - {err}".format(err=err))
+                err_log(f"  - {err}")
                 env["succeeded"] = False
                 env["errors"]["message"] = str(err)
                 return env
