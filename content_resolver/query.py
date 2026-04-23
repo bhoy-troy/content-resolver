@@ -17,6 +17,7 @@ class Query():
         self.computed_data = {}
 
     def size(self, num, suffix='B'):
+        # FIXME: is this method required or used, same function is in utils.
         for unit in ['','k','M','G']:
             if abs(num) < 1024.0:
                 return "%3.1f %s%s" % (num, unit, suffix)
