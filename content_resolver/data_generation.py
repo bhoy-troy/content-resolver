@@ -184,7 +184,7 @@ def _generate_env_json_files(query):
         # === Config
 
         log("")
-        log("  Config for: {}".format(env_conf_id))
+        log(f"  Config for: {env_conf_id}")
 
         # Where to save
         data_name = "env-conf--{env_conf_id_slug}".format(
@@ -206,7 +206,7 @@ def _generate_env_json_files(query):
         for env_id in query.envs(env_conf_id, None, None, list_all=True):
             env = query.data["envs"][env_id]
 
-            log("  Results: {}".format(env_id))
+            log(f"  Results: {env_id}")
 
             # Where to save
             data_name = "env--{env_id_slug}".format(
@@ -239,7 +239,7 @@ def _generate_workload_json_files(query):
         # === Config
 
         log("")
-        log("  Config for: {}".format(workload_conf_id))
+        log(f"  Config for: {workload_conf_id}")
 
         # Where to save
         data_name = "workload-conf--{workload_conf_id_slug}".format(
@@ -261,7 +261,7 @@ def _generate_workload_json_files(query):
         for workload_id in query.workloads(workload_conf_id, None, None, None, list_all=True):
             workload = query.data["workloads"][workload_id]
 
-            log("  Results: {}".format(workload_id))
+            log(f"  Results: {workload_id}")
 
             # Where to save
             data_name = "workload--{workload_id_slug}".format(
@@ -297,7 +297,7 @@ def _generate_view_json_files(query):
             view_id_slug = query.url_slug_id(view_conf_id)
         )
 
-        log("  {}".format(data_name))
+        log(f"  {data_name}")
 
         # What to save
         output_data = {}
@@ -333,7 +333,7 @@ def _generate_view_json_files(query):
             view_id_slug = query.url_slug_id(view_conf_id)
         )
 
-        log("  {}".format(data_name))
+        log(f"  {data_name}")
 
         # What to save
         output_data = {}
@@ -371,7 +371,7 @@ def _generate_view_json_files(query):
             view_id_slug = query.url_slug_id(view_conf_id)
         )
 
-        log("  {}".format(data_name))
+        log(f"  {data_name}")
 
         # What to save
         output_data = {}
