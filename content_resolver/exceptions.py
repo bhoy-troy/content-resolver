@@ -25,3 +25,23 @@ class KojiRootLogError(Exception):
 
 class AnalysisError(Exception):
     pass
+
+
+class MarkingError(Exception):
+    # Package marking error adaptor   for DNF5
+    pass
+
+
+class DepsolveError(Exception):
+    # Dependency resolution error adaptor  for DNF5
+    pass
+
+
+class DownloadError(Exception):
+    # Download error adaptor  for DNF5
+    pass
+
+
+class TransactionCheckError(Exception):
+    # Transaction check error adaptor  for DNF5
+    pass
