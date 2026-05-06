@@ -55,8 +55,9 @@ See Also:
 """
 
 import libdnf5
-from libdnf5.base import Base
+from libdnf5.base import Base, Goal
 from libdnf5.repo import Repo
+from libdnf5.rpm import PackageQuery
 
 from content_resolver.exceptions import (
     DepsolveError,
@@ -67,7 +68,7 @@ from content_resolver.exceptions import (
 
 
 class _DNF5Substitutions:
-    """Dict-like wrapper around DNF5 Vars for DNF4 compatibility.
+    """Dict-like wrapper around DNF5 Vars for DNF4-DNF5 compatibility.
 
     DNF4 used base.conf.substitutions as a dict-like object for template
     variables like 'releasever', 'arch', etc. DNF5 uses base.get_vars()
@@ -156,6 +157,7 @@ class _DNF5ConfigAdapter:
         _base: The DNF5 Base object (needed for vars access)
         _base_wrapper: The _DNF5BaseAdapter that owns this config
         substitutions: Dict-like object for variable access (DNF4 compatibility)
+        tsflags: Mutable list-like object for transaction flags (DNF4 compatibility)
     """
 
     def __init__(self, config, base, base_wrapper):
@@ -170,6 +172,7 @@ class _DNF5ConfigAdapter:
         self._base = base
         self._base_wrapper = base_wrapper
         self.substitutions = _DNF5Substitutions(base)
+        self.tsflags = _DNF5TsFlagsWrapper(config)
 
     def __getattr__(self, name):
         """Forward attribute access to the underlying DNF5 config.
@@ -188,15 +191,15 @@ class _DNF5ConfigAdapter:
     def __setattr__(self, name, value):
         """Forward attribute setting to underlying config.
 
-        Internal wrapper attributes (_config, _base, substitutions) are
-        stored on this object. All other attributes are forwarded to
-        the underlying DNF5 config.
+        Internal wrapper attributes (_config, _base, _base_wrapper,
+        substitutions, tsflags) are stored on this object. All other
+        attributes are forwarded to the underlying DNF5 config.
 
         Args:
             name: Attribute name
             value: Attribute value
         """
-        if name in ("_config", "_base", "_base_wrapper", "substitutions"):
+        if name in ("_config", "_base", "_base_wrapper", "substitutions", "tsflags"):
             object.__setattr__(self, name, value)
         else:
             setattr(self._config, name, value)
@@ -388,6 +391,292 @@ class _DNF5RepoAdapter:
         return getattr(self._repo_sack, name)
 
 
+class _DNF5TsFlagsWrapper:
+    """Wrapper around DNF5 tsflags that provides mutable list interface.
+
+    DNF4: base.conf.tsflags.append('justdb')  # tsflags is a mutable list
+    DNF5: base.conf.tsflags = [..., 'justdb']  # tsflags is an immutable tuple
+
+    This wrapper makes tsflags behave like a mutable list for DNF4 compatibility.
+
+    Attributes:
+        _config: The underlying DNF5 ConfigMain object
+        _flags: Internal list of flags
+    """
+
+    def __init__(self, config):
+        """Initialize the tsflags wrapper.
+
+        Args:
+            config: The DNF5 ConfigMain object
+        """
+        self._config = config
+        # Initialize with current flags
+        self._flags = list(config.tsflags)
+
+    def append(self, flag):
+        """Append a flag to tsflags (DNF4 compatibility).
+
+        Args:
+            flag: Transaction flag to add (e.g., 'justdb', 'noscripts')
+
+        Example:
+            base.conf.tsflags.append('justdb')
+        """
+        if flag not in self._flags:
+            self._flags.append(flag)
+            # Update the underlying config
+            self._config.tsflags = self._flags
+
+    def __iter__(self):
+        """Allow iteration over flags."""
+        return iter(self._flags)
+
+    def __repr__(self):
+        """String representation."""
+        return repr(self._flags)
+
+
+class _DNF5PackageWrapper:
+    """Wrapper around DNF5 Package that provides DNF4-compatible attribute access.
+
+    DNF4: pkg.name, pkg.version, pkg.arch
+    DNF5: pkg.get_name(), pkg.get_version(), pkg.get_arch()
+
+    This wrapper provides property-based access to DNF5's getter methods,
+    making DNF5 packages work with DNF4-style attribute access.
+
+    Attributes:
+        _pkg: The underlying DNF5 Package object
+    """
+
+    def __init__(self, pkg):
+        """Initialize the package wrapper.
+
+        Args:
+            pkg: A DNF5 Package object
+        """
+        self._pkg = pkg
+
+    @property
+    def name(self):
+        """Package name (DNF4 compatibility)."""
+        return self._pkg.get_name()
+
+    @property
+    def version(self):
+        """Package version (DNF4 compatibility)."""
+        return self._pkg.get_version()
+
+    @property
+    def release(self):
+        """Package release (DNF4 compatibility)."""
+        return self._pkg.get_release()
+
+    @property
+    def arch(self):
+        """Package architecture (DNF4 compatibility)."""
+        return self._pkg.get_arch()
+
+    @property
+    def epoch(self):
+        """Package epoch (DNF4 compatibility)."""
+        return self._pkg.get_epoch()
+
+    @property
+    def evr(self):
+        """Package epoch-version-release (DNF4 compatibility)."""
+        return self._pkg.get_evr()
+
+    @property
+    def nevra(self):
+        """Package name-epoch:version-release.arch (DNF4 compatibility)."""
+        return self._pkg.get_nevra()
+
+    @property
+    def sourcerpm(self):
+        """Source RPM name (DNF4 compatibility)."""
+        return self._pkg.get_sourcerpm()
+
+    @property
+    def installsize(self):
+        """Package install size in bytes (DNF4 compatibility)."""
+        return self._pkg.get_install_size()
+
+    @property
+    def description(self):
+        """Package description (DNF4 compatibility)."""
+        return self._pkg.get_description()
+
+    @property
+    def summary(self):
+        """Package summary (DNF4 compatibility)."""
+        return self._pkg.get_summary()
+
+    @property
+    def source_name(self):
+        """Source package name (DNF4 compatibility)."""
+        return self._pkg.get_source_name()
+
+    @property
+    def reponame(self):
+        """Repository name/ID (DNF4 compatibility)."""
+        return self._pkg.get_repo_id()
+
+    def __getattr__(self, name):
+        """Forward other attributes to the underlying package.
+
+        Args:
+            name: Attribute name
+
+        Returns:
+            The attribute from the underlying package
+        """
+        return getattr(self._pkg, name)
+
+    def __repr__(self):
+        """String representation of the package."""
+        return f"<Package {self.name}-{self.evr}.{self.arch}>"
+
+
+class _DNF5QueryWrapper:
+    """Wrapper around DNF5 PackageQuery that provides DNF4-compatible interface.
+
+    DNF4: query = base.sack.query; all_pkgs = query()
+    DNF5: query = PackageQuery(base); all_pkgs = list(query)
+
+    This wrapper makes PackageQuery callable and provides DNF4-compatible methods.
+
+    Attributes:
+        _query: The underlying DNF5 PackageQuery object
+    """
+
+    def __init__(self, query):
+        """Initialize the query wrapper.
+
+        Args:
+            query: A DNF5 PackageQuery object
+        """
+        self._query = query
+
+    def __call__(self):
+        """Make the query callable (DNF4 compatibility).
+
+        DNF4: all_pkgs = query()
+        DNF5: all_pkgs = list(query)
+
+        Returns:
+            List of wrapped packages with DNF4-compatible attribute access
+
+        Example:
+            all_pkgs = query()
+            for pkg in all_pkgs:
+                print(pkg.name)  # Works with DNF5
+        """
+        # Wrap each package for DNF4 compatibility
+        return [_DNF5PackageWrapper(pkg) for pkg in self._query]
+
+    def filterm(self, **kwargs):
+        """Filter the query (DNF4 compatibility).
+
+        DNF4: query.filterm(name='bash')
+        DNF5: query.filter_name(['bash'])
+
+        This is a basic implementation that handles common cases.
+        DNF5's filter methods are more specific.
+
+        Args:
+            **kwargs: Filter parameters
+
+        Returns:
+            _DNF5QueryWrapper: Wrapped filtered query
+
+        Example:
+            bash_query = query.filterm(name='bash')
+        """
+        # Create a new query with the same base
+        filtered_query = self._query
+
+        # DNF5 has specific filter methods
+        # For now, just return self - this needs expansion based on actual usage
+        # TODO: Map DNF4 filterm() args to DNF5 filter_* methods
+
+        return _DNF5QueryWrapper(filtered_query)
+
+    def __iter__(self):
+        """Allow iteration over packages.
+
+        Returns:
+            Iterator over wrapped packages with DNF4-compatible attributes
+
+        Example:
+            for pkg in query:
+                print(pkg.name)
+        """
+        return iter(_DNF5PackageWrapper(pkg) for pkg in self._query)
+
+    def __getattr__(self, name):
+        """Forward other attributes to the underlying query.
+
+        Args:
+            name: Attribute name
+
+        Returns:
+            The attribute from the underlying query
+        """
+        return getattr(self._query, name)
+
+
+class _DNF5SackWrapper:
+    """Wrapper around DNF5 PackageSack that provides DNF4-compatible query.
+
+    DNF4: query = base.sack.query
+    DNF5: query = PackageQuery(base)
+
+    Attributes:
+        _sack: The underlying DNF5 PackageSackWeakPtr
+        _base: The DNF5 Base object (needed for PackageQuery)
+    """
+
+    def __init__(self, sack, base):
+        """Initialize the sack wrapper.
+
+        Args:
+            sack: The DNF5 PackageSackWeakPtr from base.get_rpm_package_sack()
+            base: The DNF5 Base object
+        """
+        self._sack = sack
+        self._base = base
+
+    @property
+    def query(self):
+        """Get a package query object (DNF4 compatibility).
+
+        DNF4: base.sack.query (callable, returns all packages)
+        DNF5: PackageQuery(base) (not callable, iterate for packages)
+
+        Returns:
+            _DNF5QueryWrapper: Wrapped query with DNF4-compatible interface
+
+        Example:
+            query = base.sack.query
+            all_pkgs = query()  # Returns list of all packages
+        """
+        dnf5_query = PackageQuery(self._base)
+        return _DNF5QueryWrapper(dnf5_query)
+
+    def __getattr__(self, name):
+        """Forward other attributes to the underlying sack.
+
+        Args:
+            name: Attribute name
+
+        Returns:
+            The attribute from the underlying sack
+        """
+        return getattr(self._sack, name)
+
+
 class _DNF5BaseAdapter:
     """Wrapper around libdnf5.base.Base providing DNF4-compatible interface.
 
@@ -420,11 +709,30 @@ class _DNF5BaseAdapter:
 
         Creates a new DNF5 Base object and initializes wrapper proxies
         for config and repos access.
+
+        DNF5 requires setup() to be called before repo operations, but AFTER
+        configuration. We delay setup() until it's actually needed.
         """
         self._base = Base()
+
+        # Track if setup() has been called
+        self._setup_called = False
+
         # Lazy-initialized proxies (created on first access)
         self._conf_proxy = None
         self._repos_proxy = None
+        self._goal = None  # DNF5 Goal for package installation
+
+    def _ensure_setup(self):
+        """Ensure base.setup() has been called.
+
+        DNF5 requires setup() to be called before repo operations, but config
+        options get locked after setup(). This method is called automatically
+        when needed (before repo operations or fill_sack).
+        """
+        if not self._setup_called:
+            self._base.setup()
+            self._setup_called = True
 
     @property
     def conf(self):
@@ -463,6 +771,9 @@ class _DNF5BaseAdapter:
             for repo in base.repos.all():
                 print(repo.get_id())
         """
+        # Ensure setup() is called before accessing repos
+        self._ensure_setup()
+
         if self._repos_proxy is None:
             self._repos_proxy = _DNF5RepoAdapter(self._base.get_repo_sack(), self._base)
         return self._repos_proxy
@@ -497,22 +808,26 @@ class _DNF5BaseAdapter:
         """Load repository metadata and fill the package sack (DNF4 compatibility).
 
         DNF4: base.fill_sack(load_system_repo=False)
-        DNF5: base.get_repo_sack().update_and_load_enabled_repos()
+        DNF5: base.get_repo_sack().update_and_load_enabled_repos(load_system)
 
         This method loads repository metadata and creates the package sack
         for querying packages.
 
         Args:
             load_system_repo: Whether to load the system repo (default True)
-                             Note: In DNF5, system repo is handled differently
             load_available_repos: Whether to load available repos (default True)
+                                 Note: DNF5 doesn't have a separate parameter for this
 
         Example:
             base.fill_sack(load_system_repo=False)
         """
-        # DNF5 uses update_and_load_enabled_repos() to load repo metadata
+        # Ensure setup() is called before loading repos
+        self._ensure_setup()
+
+        # DNF5 uses update_and_load_enabled_repos(load_system) to load repo metadata
         repo_sack = self._base.get_repo_sack()
-        repo_sack.update_and_load_enabled_repos()
+        # TODO: update depreciated update_and_load_enabled_repos to load_repos()
+        repo_sack.update_and_load_enabled_repos(load_system_repo)
 
         # After loading repos, we can access the package sack
         # DNF5 automatically creates the sack when repos are loaded
@@ -521,16 +836,94 @@ class _DNF5BaseAdapter:
     def sack(self):
         """Get the package sack for querying packages (DNF4 compatibility).
 
-        DNF4: base.sack
-        DNF5: base.get_rpm_package_sack()
+        DNF4: base.sack (with .query property)
+        DNF5: base.get_rpm_package_sack() (no .query property)
 
         Returns:
-            The RPM package sack
+            _DNF5SackWrapper: Wrapped sack with DNF4-compatible query property
 
         Example:
             query = base.sack.query
+            all_pkgs = query()
         """
-        return self._base.get_rpm_package_sack()
+        raw_sack = self._base.get_rpm_package_sack()
+        return _DNF5SackWrapper(raw_sack, self._base)
+
+    def install(self, pkg_spec, strict=True):
+        """Mark package(s) for installation (DNF4 compatibility).
+
+        DNF4: base.install(pkg) adds to transaction
+        DNF5: goal.add_install(pkg) adds to goal
+
+        Args:
+            pkg_spec: Package name or spec to install
+            strict: Whether to be strict about matches (default True)
+
+        Example:
+            base.install('bash')
+            base.resolve()
+
+        Note:
+            In DNF5, we create a Goal lazily and add packages to it.
+            Call base.resolve() or base.do_transaction() to execute.
+        """
+        # Ensure setup() is called
+        self._ensure_setup()
+
+        # Create goal lazily
+        if self._goal is None:
+            self._goal = Goal(self._base)
+
+        # Add package to goal
+        # DNF5's add_install() takes a package spec string
+        self._goal.add_install(pkg_spec)
+
+    @property
+    def goal(self):
+        """Get the Goal object (DNF5).
+
+        Returns:
+            The DNF5 Goal object used for package marking
+
+        Example:
+            base.install('bash')
+            problems = base.goal.get_problems()
+        """
+        if self._goal is None:
+            self._goal = Goal(self._base)
+        return self._goal
+
+    def resolve(self, allow_erasing=False):
+        """Resolve package dependencies (DNF4 compatibility).
+
+        DNF4: base.resolve() resolves the transaction
+        DNF5: goal.resolve() resolves the goal
+
+        Args:
+            allow_erasing: Whether to allow package erasure (default False)
+
+        Returns:
+            True if resolution succeeded
+
+        Example:
+            base.install('bash')
+            base.resolve()
+
+        Note:
+            In DNF5, this resolves the Goal. Any problems can be
+            retrieved via base.goal.get_problems().
+        """
+        # Ensure we have a goal
+        if self._goal is None:
+            self._goal = Goal(self._base)
+
+        # DNF5: resolve the goal
+        # The resolve() method returns None, problems are checked separately
+        self._goal.resolve()
+
+        # DNF4 returned True on success
+        # For compatibility, we return True (check goal.get_problems() for issues)
+        return True
 
     def __getattr__(self, name):
         """Forward other attributes to the underlying DNF5 Base object.

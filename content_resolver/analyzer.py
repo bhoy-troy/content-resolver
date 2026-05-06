@@ -1,15 +1,20 @@
 import tempfile, os, json, datetime, urllib.request, sys, koji
 
 import time
+import urllib.request
+from concurrent.futures import ProcessPoolExecutor, as_completed
+
+import koji
 
 from content_resolver.dnf import _DNFAdapter
 
-dnf = _DNFAdapter()
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import multiprocessing, asyncio
 from content_resolver.utils import dump_data, load_data, log, err_log, pkg_id_to_name, workload_id_to_conf_id, url_to_id
 from content_resolver.exceptions import RepoDownloadError, BuildGroupAnalysisError, KojiRootLogError, AnalysisError
+
+dnf = _DNFAdapter()
 
 
 def pkg_placeholder_name_to_id(placeholder_name):
