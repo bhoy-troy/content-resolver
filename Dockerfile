@@ -1,7 +1,13 @@
 FROM registry.fedoraproject.org/fedora:44
 
 RUN dnf -y update fedora-gpg-keys && \
-    dnf -y install git python3-jinja2 python3-koji python3-yaml python3-dnf && \
+    dnf -y install  \
+        git  \
+        python3-jinja2  \
+        python3-koji  \
+        python3-yaml  \
+        python3-libdnf5  \
+        python3-libdnf5-cli && \
     dnf clean all && \
     rm -rf /var/cache/dnf
 
