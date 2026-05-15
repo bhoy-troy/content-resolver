@@ -1,8 +1,9 @@
 #! /usr/bin/python3
 
-import content_resolver.analyzer
 import sys
 import urllib.request
+
+import content_resolver.analyzer
 
 # This is a starting point for a test of the function parsing root logs.
 # Set the url below to any root log, and then you can see what it detected.

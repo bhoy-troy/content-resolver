@@ -2,6 +2,7 @@
 """Test label filtering functionality with pytest."""
 
 import pytest
+
 from content_resolver.config_manager import ConfigManager
 
 

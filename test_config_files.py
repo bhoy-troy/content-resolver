@@ -2,6 +2,7 @@
 
 from content_resolver.config_manager import ConfigManager
 
+
 def create_mock_settings():
     settings = {}
     settings["configs"] = "input/configs"

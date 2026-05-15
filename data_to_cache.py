@@ -7,7 +7,9 @@
 # to support reproducing local builds with the content already resolved.
 # Use feedback_pipeline.py with the --use-cache option.
 
-import os, json
+import json
+import os
+
 
 class SetEncoder(json.JSONEncoder):
     def default(self, obj):

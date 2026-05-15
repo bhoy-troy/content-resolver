@@ -1,4 +1,5 @@
 import os
+
 from content_resolver.utils import dump_data, log
 
 

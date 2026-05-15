@@ -1,16 +1,28 @@
 #!/usr/bin/python3
 
 
-import argparse, yaml, tempfile, os, subprocess, json, jinja2, datetime, copy, re, dnf, pprint, sys, koji
-import concurrent.futures
-import rpm_showme as showme
-from functools import lru_cache
-import multiprocessing, time
-
+import argparse
 import asyncio
+import concurrent.futures
+import copy
+import datetime
+import json
+import multiprocessing
+import os
+import pprint
+import re
+import subprocess
+import sys
+import tempfile
+import time
+from functools import lru_cache
 
+import dnf
+import jinja2
+import koji
+import yaml
 
-
+import rpm_showme as showme
 
 
 class AnalysisError(Exception):

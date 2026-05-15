@@ -9,8 +9,13 @@
 # For more information on the license, see LICENSE.
 # For more information on free software, see <https://www.gnu.org/philosophy/free-sw.en.html>.
 
-import dnf, json, subprocess, tempfile, argparse, jinja2
+import argparse
+import json
+import subprocess
+import tempfile
 
+import dnf
+import jinja2
 
 # === Data Structures ===
 #

@@ -1,6 +1,8 @@
 #!/usr/bin/python3
 
-import json, requests
+import json
+
+import requests
 
 
 def log(msg):

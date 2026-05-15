@@ -1,10 +1,11 @@
-import os
-import yaml
 import argparse
+import os
 
+import yaml
+
+from content_resolver.exceptions import ConfigError, SettingsError
 from content_resolver.utils import err_log, log
 
-from content_resolver.exceptions import SettingsError, ConfigError
 
 class ConfigManager:
     def __init__(self, config_file=None):
