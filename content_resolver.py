@@ -41,8 +41,6 @@ from content_resolver.utils import datetime_now_string, dump_data, load_data, lo
 #
 
 
-
-
 ###############################################################################
 ### Main ######################################################################
 ###############################################################################
@@ -62,13 +60,11 @@ def main():
 
     settings["global_refresh_time_started"] = datetime.datetime.now().strftime("%-d %B %Y %H:%M UTC")
 
-
-
     if settings["use_cache"]:
         configs = load_data("cache_configs.json")
         data = load_data("cache_data.json")
     else:
-        configs =  config_manager.get_configs()
+        configs = config_manager.get_configs()
         analyzer = Analyzer(configs, settings)
         data = analyzer.analyze_things()
 
@@ -76,11 +72,8 @@ def main():
             dump_data("cache_configs.json", configs)
             dump_data("cache_data.json", data)
 
-
-
     # measuring time of execution
     time_analysis_time = datetime_now_string()
-
 
     # -------------------------------------------------
     # Stage 2: Generating pages and data outputs
@@ -91,7 +84,6 @@ def main():
     generate_pages(query)
     generate_data_files(query)
     generate_historic_data(query)
-
 
     # -------------------------------------------------
     # Done! Printing final summary
@@ -110,11 +102,10 @@ def main():
     log("Feedback Pipeline build done!")
     log("=============================")
     log("")
-    log("  Started:       {}".format(time_started))
-    log("  Analysis done: {}".format(time_analysis_time))
-    log("  Finished:      {}".format(time_ended))
+    log(f"  Started:       {time_started}")
+    log(f"  Analysis done: {time_analysis_time}")
+    log(f"  Finished:      {time_ended}")
     log("")
-
 
 
 if __name__ == "__main__":

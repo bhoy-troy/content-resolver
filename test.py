@@ -1,28 +1,11 @@
 #!/usr/bin/python3
 
 
-import argparse
 import asyncio
-import concurrent.futures
-import copy
-import datetime
-import json
 import multiprocessing
 import os
-import pprint
-import re
-import subprocess
 import sys
-import tempfile
 import time
-from functools import lru_cache
-
-import dnf
-import jinja2
-import koji
-import yaml
-
-import rpm_showme as showme
 
 
 class AnalysisError(Exception):
@@ -32,17 +15,18 @@ class AnalysisError(Exception):
 # Highlight subprocesses
 first_log_pid = os.getpid()
 
+
 def log(msg):
     if first_log_pid == os.getpid():
-        print("  {}  :  {}".format(os.getpid(), msg), file=sys.stderr)
+        print(f"  {os.getpid()}  :  {msg}", file=sys.stderr)
     else:
-        print("* {}  :  {}".format(os.getpid(), msg), file=sys.stderr)
+        print(f"* {os.getpid()}  :  {msg}", file=sys.stderr)
+
 
 log("")
 
 
-class Analyzer():
-
+class Analyzer:
     def __init__(self):
         self.workload_queue = {}
         self.workload_queue_counter_total = 0
@@ -80,8 +64,6 @@ class Analyzer():
         """
 
         return workload
-        
-
 
     def _analyze_workload(self, workload_conf, env_conf, repo, arch):
 
@@ -92,23 +74,19 @@ class Analyzer():
         workload["repo_id"] = repo["id"]
         workload["arch"] = arch
 
-
         log(workload)
-
 
         time.sleep(2)
 
         if workload_conf["id"] == 22 and arch == "x86_64":
-            fuck
+            print("fuck")
 
         return workload
-
 
     def _analyze_workload_process(self, queue_result, workload_conf, env_conf, repo, arch):
 
         workload = self._analyze_workload(workload_conf, env_conf, repo, arch)
         queue_result.put(workload)
-
 
     async def _analyze_workloads_subset_async(self, task_queue, results):
 
@@ -119,10 +97,7 @@ class Analyzer():
             arch = task["arch"]
 
             workload_id = "{workload_conf_id}:{env_conf_id}:{repo_id}:{arch}".format(
-                workload_conf_id=workload_conf["id"],
-                env_conf_id=env_conf["id"],
-                repo_id=repo["id"],
-                arch=arch
+                workload_conf_id=workload_conf["id"], env_conf_id=env_conf["id"], repo_id=repo["id"], arch=arch
             )
 
             # Max processes
@@ -131,38 +106,40 @@ class Analyzer():
                     self.current_subprocesses += 1
                     break
                 else:
-                    await asyncio.sleep(.1)
+                    await asyncio.sleep(0.1)
 
             # Log progress
             self.workload_queue_counter_current += 1
-            log("[{} of {}]".format(self.workload_queue_counter_current, self.workload_queue_counter_total))
-            log("Analyzing workload: {}".format(workload_id))
+            log(f"[{self.workload_queue_counter_current} of {self.workload_queue_counter_total}]")
+            log(f"Analyzing workload: {workload_id}")
             log("")
 
             queue_result = multiprocessing.Queue()
-            process = multiprocessing.Process(target=self._analyze_workload_process, args=(queue_result, workload_conf, env_conf, repo, arch), daemon=True)
+            process = multiprocessing.Process(
+                target=self._analyze_workload_process,
+                args=(queue_result, workload_conf, env_conf, repo, arch),
+                daemon=True,
+            )
             process.start()
 
             # Now wait a bit for the result.
             # This is a terrible way to implement an async way to
             # wait for the result with a 222 seconds timeout.
 
-            
-
             # 2 seconds
             for _ in range(1, 20):
                 if queue_result.empty():
-                    await asyncio.sleep(.1)
+                    await asyncio.sleep(0.1)
                 else:
                     break
-            
+
             # 20 seconds
             for _ in range(1, 20):
                 if queue_result.empty():
                     await asyncio.sleep(1)
                 else:
                     break
-            
+
             # 200 seconds
             for _ in range(1, 20):
                 if queue_result.empty():
@@ -170,13 +147,13 @@ class Analyzer():
                 else:
                     break
 
-            #while True:
+            # while True:
             #    if process.is_alive():
             #        log("  waiting on {}".format(workload_id))
             #        await asyncio.sleep(1)
             #    else:
             #        break
-            
+
             self.current_subprocesses -= 1
 
             # This basically means there was an exception in the processing and the process crashed
@@ -191,7 +168,7 @@ class Analyzer():
                 log("  workload_conf: {}".format(workload_conf["id"]))
                 log("  env_conf:      {}".format(env_conf["id"]))
                 log("  repo:          {}".format(repo["id"]))
-                log("  arch:          {}".format(arch))
+                log(f"  arch:          {arch}")
                 log("")
                 log("More details somewhere above.")
                 log("")
@@ -199,11 +176,10 @@ class Analyzer():
                 log("")
                 log("")
                 sys.exit(1)
-        
-            workload = queue_result.get()
-            
-            results[workload_id] = workload
 
+            workload = queue_result.get()
+
+            results[workload_id] = workload
 
     async def _analyze_workloads_async(self, results):
 
@@ -213,60 +189,44 @@ class Analyzer():
 
         for repo in self.workload_queue:
             for arch in self.workload_queue[repo]:
-
                 task_queue = self.workload_queue[repo][arch]
 
                 tasks.append(asyncio.create_task(self._analyze_workloads_subset_async(task_queue, results)))
-        
+
         for task in tasks:
             await task
-            await asyncio.sleep(.1)
+            await asyncio.sleep(0.1)
 
         log("DONE!")
 
-    
     def _queue_workload_processing(self, workload_conf, env_conf, repo, arch):
 
-        #log("_queue_workload_processing")
-        
+        # log("_queue_workload_processing")
+
         repo_id = repo["id"]
 
         if repo_id not in self.workload_queue:
             self.workload_queue[repo_id] = {}
-        
+
         if arch not in self.workload_queue[repo_id]:
             self.workload_queue[repo_id][arch] = []
 
-        workload_task = {
-            "workload_conf": workload_conf,
-            "env_conf" : env_conf,
-            "repo" : repo,
-            "arch" : arch
-        }
+        workload_task = {"workload_conf": workload_conf, "env_conf": env_conf, "repo": repo, "arch": arch}
 
         self.workload_queue[repo_id][arch].append(workload_task)
 
-
     def _analyze_workloads(self):
 
-        #log("_analyze_workloads")
+        # log("_analyze_workloads")
 
         for repo_id in ["fedora", "rhel"]:
             for arch in ["aarch64", "x86_64"]:
+                for n in range(1, 10):
+                    workload_conf = {"id": n}
 
-                for n in range(1,10):
+                    env_conf = {"id": "env_id"}
 
-                    workload_conf = {
-                        "id": n
-                    }
-
-                    env_conf = {
-                        "id": "env_id"
-                    }
-
-                    repo = {
-                        "id": repo_id
-                    }
+                    repo = {"id": repo_id}
 
                     self._queue_workload_processing(workload_conf, env_conf, repo, arch)
 
@@ -274,7 +234,7 @@ class Analyzer():
 
         self.data["workloads"] = {}
 
-        log("Analyzing {} workloads.".format(self.workload_queue_counter_total))
+        log(f"Analyzing {self.workload_queue_counter_total} workloads.")
         log("")
         log("")
 
@@ -285,4 +245,3 @@ log("")
 a = Analyzer()
 a._analyze_workloads()
 print(a.data["workloads"])
-

@@ -1,9 +1,11 @@
 import os
+from typing import Any
 
+from content_resolver.query import Query
 from content_resolver.utils import dump_data, log
 
 
-def _generate_json_file(data, page_name, settings):
+def _generate_json_file(data: Any, page_name: str, settings: dict[str, Any]) -> None:
     log(f"Generating the '{page_name}' JSON file...")
 
     output = settings["output"]
@@ -16,7 +18,7 @@ def _generate_json_file(data, page_name, settings):
     log("")
 
 
-def _generate_txt_file(data_list, file_name, settings):
+def _generate_txt_file(data_list: list[str], file_name: str, settings: dict[str, Any]) -> None:
 
     file_contents = "\n".join(data_list)
 
@@ -29,11 +31,10 @@ def _generate_txt_file(data_list, file_name, settings):
         file.write(file_contents)
 
 
-def _generate_view_lists(query):
+def _generate_view_lists(query: Query) -> None:
     log("Generating view lists...")
 
     for view_conf_id, view_conf in query.configs["views"].items():
-
         # all      RPM    NEVRAs      view-all-binary-package-list
         # all      RPM    NEVRs       view-all-binary-package-nevr-list
         # all      RPM    Names       view-all-binary-package-name-list
@@ -57,11 +58,9 @@ def _generate_view_lists(query):
         # build    SRPM   NEVRs       view-buildroot-package-nevr-list
         # build    SRPM   Names       view-buildroot-source-package-name-list
 
-
         all_arches_lists = {}
 
         for arch in view_conf["architectures"]:
-
             view_id = f"{view_conf_id}:{arch}"
             view = query.data["views"][view_id]
 
@@ -72,31 +71,26 @@ def _generate_view_lists(query):
                 "view-all-binary-package-list": set(),
                 "view-all-binary-package-nevr-list": set(),
                 "view-all-binary-package-name-list": set(),
-
                 # all      SRPM   NEVRs       view-all-source-package-list
                 # all      SRPM   Names       view-all-source-package-name-list
                 "view-all-source-package-list": set(),
                 "view-all-source-package-name-list": set(),
-
                 # runtime  RPM    NEVRAs      view-binary-package-list
                 # runtime  RPM    NEVRs       view-binary-package-nevr-list
                 # runtime  RPM    Names       view-binary-package-name-list
                 "view-binary-package-list": set(),
                 "view-binary-package-nevr-list": set(),
                 "view-binary-package-name-list": set(),
-
                 # runtime  SRPM   NEVRs       view-source-package-list
                 # runtime  SRPM   Names       view-source-package-name-list
                 "view-source-package-list": set(),
                 "view-source-package-name-list": set(),
-
                 # build    RPM    NEVRAs      view-buildroot-package-list
                 # build    RPM    NEVRs       view-buildroot-package-nevr-list
                 # build    RPM    Names       view-buildroot-package-name-list
                 "view-buildroot-package-list": set(),
                 "view-buildroot-package-nevr-list": set(),
                 "view-buildroot-package-name-list": set(),
-
                 # build    SRPM   NEVRs       view-buildroot-source-package-list
                 # build    SRPM   Names       view-buildroot-source-package-name-list
                 "view-buildroot-source-package-list": set(),
@@ -129,38 +123,33 @@ def _generate_view_lists(query):
                     lists["view-buildroot-source-package-list"].add(srpm_id)
                     lists["view-buildroot-source-package-name-list"].add(pkg["source_name"])
 
-
             for list_name, list_content in lists.items():
-
                 # Generate the arch-specific lists
                 file_name = f"{list_name}--{view_conf_id}--{arch}"
-                _generate_txt_file(sorted(list(list_content)), file_name, query.settings)
+                _generate_txt_file(sorted(list_content), file_name, query.settings)
 
                 # Populate the all-arch lists
                 if list_name not in all_arches_lists:
                     all_arches_lists[list_name] = set()
                 all_arches_lists[list_name].update(list_content)
 
-
         for list_name, list_content in all_arches_lists.items():
-
             # Generate the all-arch lists
             file_name = f"{list_name}--{view_conf_id}"
-            _generate_txt_file(sorted(list(list_content)), file_name, query.settings)
+            _generate_txt_file(sorted(list_content), file_name, query.settings)
 
     log("Done!")
     log("")
 
 
-def _generate_env_json_files(query):
+def _generate_env_json_files(query: Query) -> None:
 
     log("Generating JSON files for environments...")
 
     # == envs
     log("")
     log("Envs:")
-    for env_conf_id, env_conf in query.configs["envs"].items():
-
+    for env_conf_id, _env_conf in query.configs["envs"].items():
         # === Config
 
         log("")
@@ -179,11 +168,9 @@ def _generate_env_json_files(query):
         # And save it
         _generate_json_file(output_data, data_name, query.settings)
 
-
         # === Results
 
         for env_id in query.envs(env_conf_id, None, None, list_all=True):
-
             log(f"  Results: {env_id}")
 
             # Where to save
@@ -204,15 +191,14 @@ def _generate_env_json_files(query):
     log("")
 
 
-def _generate_workload_json_files(query):
+def _generate_workload_json_files(query: Query) -> None:
 
     log("Generating JSON files for workloads...")
 
     # == Workloads
     log("")
     log("Workloads:")
-    for workload_conf_id, workload_conf in query.configs["workloads"].items():
-
+    for workload_conf_id, _workload_conf in query.configs["workloads"].items():
         # === Config
 
         log("")
@@ -231,11 +217,10 @@ def _generate_workload_json_files(query):
         # And save it
         _generate_json_file(output_data, data_name, query.settings)
 
-
         # === Results
 
         for workload_id in query.workloads(workload_conf_id, None, None, None, list_all=True):
-            workload = query.data["workloads"][workload_id]
+            query.data["workloads"][workload_id]
 
             log(f"  Results: {workload_id}")
 
@@ -247,7 +232,7 @@ def _generate_workload_json_files(query):
                 "id": workload_id,
                 "type": "workload",
                 "data": query.data["workloads"][workload_id],
-                "pkg_query": query.workload_pkgs_id(workload_id)
+                "pkg_query": query.workload_pkgs_id(workload_id),
             }
 
             # And save it
@@ -257,10 +242,10 @@ def _generate_workload_json_files(query):
     log("")
 
 
-def _generate_view_json_files(query):
+def _generate_view_json_files(query: Query) -> None:
 
     log("Generating JSON files for views...")
-    for view_conf_id, view_conf in query.configs["views"].items():
+    for view_conf_id, _view_conf in query.configs["views"].items():
         view_all_arches = query.data["views_all_arches"][view_conf_id]
 
         # =================================================================
@@ -273,10 +258,7 @@ def _generate_view_json_files(query):
         log(f"  {data_name}")
 
         # What to save
-        output_data = {
-            "id": view_conf_id,
-            "pkgs": {}
-        }
+        output_data = {"id": view_conf_id, "pkgs": {}}
 
         keys_to_save = [
             "name",
@@ -286,7 +268,7 @@ def _generate_view_json_files(query):
             "hard_dependency_of_pkg_nevrs",
             "weak_dependency_of_pkg_nevrs",
             "in_workload_conf_ids_req",
-            "level_number"
+            "level_number",
         ]
 
         for pkg_id, pkg in view_all_arches["pkgs_by_nevr"].items():
@@ -326,9 +308,7 @@ def _generate_view_json_files(query):
         ]
 
         for srpm_name, srpm in view_all_arches["source_pkgs_by_name"].items():
-            output_data["srpms"][srpm_name] = {
-                key: srpm[key] for key in keys_to_save
-            }
+            output_data["srpms"][srpm_name] = {key: srpm[key] for key in keys_to_save}
 
         # And save it
         _generate_json_file(output_data, data_name, query.settings)
@@ -343,21 +323,16 @@ def _generate_view_json_files(query):
         log(f"  {data_name}")
 
         # What to save
-        output_data = {
-            "id": view_conf_id,
-            "workloads": view_all_arches["workloads"]
-        }
-
+        output_data = {"id": view_conf_id, "workloads": view_all_arches["workloads"]}
 
         # And save it
         _generate_json_file(output_data, data_name, query.settings)
-
 
     log("  Done!")
     log("")
 
 
-def _generate_maintainers_json_file(query):
+def _generate_maintainers_json_file(query: Query) -> None:
 
     log("Generating the maintainers json file...")
 
@@ -368,7 +343,7 @@ def _generate_maintainers_json_file(query):
     log("")
 
 
-def generate_data_files(query):
+def generate_data_files(query: Query) -> None:
 
     log("")
     log("###############################################################################")
@@ -390,6 +365,3 @@ def generate_data_files(query):
 
     # Generate data for the top-level results pages
     _generate_maintainers_json_file(query)
-
-
-

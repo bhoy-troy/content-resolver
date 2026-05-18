@@ -33,8 +33,8 @@ import jinja2
 #         "node2": Node
 #     }
 # }
-# 
-# 
+#
+#
 # Package = {
 #     "name": "package",
 #     "epoch": "",
@@ -68,7 +68,7 @@ import jinja2
 #         "package3"
 #     ],
 # }
-# 
+#
 # Group = {
 #     "name": "group",
 #     "size": 423432423,
@@ -101,7 +101,7 @@ import jinja2
 #         "package3"
 #     ],
 # }
-# 
+#
 # Node = {
 #     "name": "node",
 #     "size": 323232,
@@ -115,6 +115,7 @@ import jinja2
 #         "node2",
 #     ],
 # }
+
 
 def log(msg):
     print("    (rpm-showme)  " + str(msg))
@@ -167,13 +168,14 @@ def _create_packages_structure(installed, query):
 
     return packages
 
+
 def load_packages_from_path(root="/", releasever=None):
 
     # Look at the system and get a list of all installed RPM packages
     # in the as a list of DNF Package objects
     base = dnf.Base()
     if releasever:
-        base.conf.substitutions['releasever'] = releasever
+        base.conf.substitutions["releasever"] = releasever
     base.conf.installroot = root
     base.fill_sack(load_available_repos=False)
     query = base.sack.query()
@@ -184,14 +186,30 @@ def load_packages_from_path(root="/", releasever=None):
 
 def load_packages_from_container_image(image):
     base = dnf.Base()
-    
-    data = subprocess.check_output(['podman', 'inspect', image])
-    #size_bytes = json.loads(data)[0]["Size"]
+
+    # data = subprocess.check_output(["podman", "inspect", image])
+    # size_bytes = json.loads(data)[0]["Size"]
 
     # Extract DNF and RPM data
     with tempfile.TemporaryDirectory() as tmp:
-        cmd = "mkdir -p /workdir/var/lib && cp -r /var/lib/dnf /workdir/var/lib/ && cp -r /var/lib/rpm /workdir/var/lib/"
-        subprocess.run(['podman', 'run', '--rm', '-v', tmp+':/workdir:z', '-v', 'copy.sh:/copy.sh:z', image, '/bin/sh', '-c', cmd])
+        cmd = (
+            "mkdir -p /workdir/var/lib && cp -r /var/lib/dnf /workdir/var/lib/ && cp -r /var/lib/rpm /workdir/var/lib/"
+        )
+        subprocess.run(
+            [
+                "podman",
+                "run",
+                "--rm",
+                "-v",
+                tmp + ":/workdir:z",
+                "-v",
+                "copy.sh:/copy.sh:z",
+                image,
+                "/bin/sh",
+                "-c",
+                cmd,
+            ]
+        )
         base.conf.installroot = tmp
         base.fill_sack()
 
@@ -199,7 +217,6 @@ def load_packages_from_container_image(image):
     installed = list(query.installed())
 
     return _create_packages_structure(installed, query)
-
 
 
 def compute_graph(packages, groups=None):
@@ -222,7 +239,9 @@ def compute_graph(packages, groups=None):
                     node["size"] = group["size"]
                     node["type"] = "group"
                     node["dependencies"] = group["requires_resolved"]
-                    node["weak_dependencies"] = list(set(group["recommends_resolved"]) | set(group["suggests_resolved"]))
+                    node["weak_dependencies"] = list(
+                        set(group["recommends_resolved"]) | set(group["suggests_resolved"])
+                    )
 
                     graph[node["name"]] = node
 
@@ -267,21 +286,21 @@ def compute_graph(packages, groups=None):
             # Package -> Package relations
             else:
                 node["dependencies"] = package["requires_resolved"]
-                node["weak_dependencies"] = list(set(package["recommends_resolved"]) | set(package["suggests_resolved"]))
-            
+                node["weak_dependencies"] = list(
+                    set(package["recommends_resolved"]) | set(package["suggests_resolved"])
+                )
 
             graph[node["name"]] = node
 
     return graph
 
-        
 
-def size(num, suffix='B'):
-    for unit in ['','k','M','G']:
+def size(num, suffix="B"):
+    for unit in ["", "k", "M", "G"]:
         if abs(num) < 1024.0:
             return "%3.1f %s%s" % (num, unit, suffix)
         num /= 1024.0
-    return "%.1f %s%s" % (num, 'T', suffix)
+    return "%.1f %s%s" % (num, "T", suffix)
 
 
 def graph_to_dot(graph, sizes=False, highlights=None):
@@ -291,14 +310,12 @@ def graph_to_dot(graph, sizes=False, highlights=None):
     if not highlights:
         highlights = []
 
-    
     # Start of the graph
-    dot = 'digraph packages {\n'
+    dot = "digraph packages {\n"
 
     # Formatting
     for _, node in graph.items():
-
-        formatting = ['shape=none']
+        formatting = ["shape=none"]
 
         # Showing sizes
         if sizes:
@@ -306,12 +323,12 @@ def graph_to_dot(graph, sizes=False, highlights=None):
 
         # Highlighting certain nodes
         if node["name"] in highlights:
-            formatting.append('fontsize=22')
+            formatting.append("fontsize=22")
             formatting.append('fontcolor="#cc0066"')
 
         # Highlight groups
         if node["type"] == "group":
-            formatting.append('shape=ellipse')
+            formatting.append("shape=ellipse")
 
         # Print it
         if formatting:
@@ -321,38 +338,36 @@ def graph_to_dot(graph, sizes=False, highlights=None):
     for _, node in graph.items():
         dot += '"{node}" -> {{\n'.format(node=node["name"])
         for dep in node["dependencies"]:
-            dot += '    "{dep}"\n'.format(dep=dep)
+            dot += f'    "{dep}"\n'
         dot += "};\n"
 
     # Weak dependencies
     for _, node in graph.items():
         dot += '"{node}" -> {{\n'.format(node=node["name"])
         for dep in node["weak_dependencies"]:
-            dot += '    "{dep}"\n'.format(dep=dep)
-        dot += '}[style=dashed];\n'
+            dot += f'    "{dep}"\n'
+        dot += "}[style=dashed];\n"
 
-    dot += '}'
+    dot += "}"
 
     return dot
-
 
 
 def graph_to_package_list(graph, sizes=False):
 
     groups = []
     packages = []
-    
-    for _, node in graph.items():
 
+    for _, node in graph.items():
         if node["type"] == "group":
             if sizes:
-                groups.append('[ {name} ({size}) ]'.format(name=node["name"], size=size(node["size"])))
+                groups.append("[ {name} ({size}) ]".format(name=node["name"], size=size(node["size"])))
             else:
-                groups.append('[ {name} ]'.format(name=node["name"]))
+                groups.append("[ {name} ]".format(name=node["name"]))
 
         else:
             if sizes:
-                packages.append('{name} ({size})'.format(name=node["name"], size=size(node["size"])))
+                packages.append("{name} ({size})".format(name=node["name"], size=size(node["size"])))
             else:
                 packages.append(node["name"])
 
@@ -412,15 +427,13 @@ def packages_to_group(name, packages):
     return group
 
 
-
 def dump_data(path, data):
-    with open(path, 'w') as file:
+    with open(path, "w") as file:
         json.dump(data, file)
 
 
-
 def load_data(path):
-    with open(path, 'r') as file:
+    with open(path) as file:
         data = json.load(file)
 
     return data
@@ -503,7 +516,6 @@ document.addEventListener('click', function(e) {
     return svg.split("</svg>")[0] + javascript + "\n</svg>\n"
 
 
-
 def dot_to_graph_svg(dot):
 
     log("computing the svg:")
@@ -519,7 +531,12 @@ def dot_to_graph_svg(dot):
 
     log("    running neato...")
 
-    stage3 = subprocess.run(["neato", "-Gstart=3", "-n", "-Ecolor=#44444455", "-Tsvg", "-Gdpi=60"], capture_output=True, input=stage2.stdout, encoding="UTF-8")
+    stage3 = subprocess.run(
+        ["neato", "-Gstart=3", "-n", "-Ecolor=#44444455", "-Tsvg", "-Gdpi=60"],
+        capture_output=True,
+        input=stage2.stdout,
+        encoding="UTF-8",
+    )
 
     svg = str(stage3.stdout)
 
@@ -642,28 +659,50 @@ def main():
     # $ showme feora:30 graph
     # $ showme / graph
 
-    parser = argparse.ArgumentParser(description="Dependency visualisation of an RPM-based installation (a system, an image, etc.)", formatter_class=argparse.RawTextHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description="Dependency visualisation of an RPM-based installation (a system, an image, etc.)",
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
 
-    parser.add_argument("what", metavar="WHAT",
+    parser.add_argument(
+        "what",
+        metavar="WHAT",
         help="""What you want to see. Accepts:
   - a filesystem path
   - a container image such as 'fedora:30'
-""")
-    parser.add_argument("how", metavar="HOW", choices=["graph", "directed-graph", "list", "report", "size"],
+""",
+    )
+    parser.add_argument(
+        "how",
+        metavar="HOW",
+        choices=["graph", "directed-graph", "list", "report", "size"],
         help="""How you want to see it. Choose from:
   graph — Dependency graph with clustering.
   directed-graph — Simple dependency graph organized top to bottom.
   list — Basic list of packages.
   size — Just the total size of all packages.
   report — An HTML page comparing multiple installations.
-""")
+""",
+    )
     parser.add_argument("where", nargs="?", metavar="WHERE", help="Filename of the output (stdout when not specified).")
 
-    parser.add_argument("--group-container", action="append", nargs=2, metavar=("GRPUP_NAME", "CONTAINER"), help="Group packages in the given container into a single node to simplify the graph.\nUseful, for example, when visualizing changes on top of a base image.")
+    parser.add_argument(
+        "--group-container",
+        action="append",
+        nargs=2,
+        metavar=("GRPUP_NAME", "CONTAINER"),
+        help="Group packages in the given container into a single node to simplify the graph.\nUseful, for example, when visualizing changes on top of a base image.",
+    )
 
     parser.add_argument("--sizes", action="store_true", help="Show package sizes on the graph.")
     parser.add_argument("-H", "--highlight", action="append", help="Highlight specified nodes in the graph.")
-    parser.add_argument("--add", action="append", nargs=2, metavar=("NAME", "WHAT"), help="Add more installation to the output. Currently only supported by 'report'.")
+    parser.add_argument(
+        "--add",
+        action="append",
+        nargs=2,
+        metavar=("NAME", "WHAT"),
+        help="Add more installation to the output. Currently only supported by 'report'.",
+    )
     parser.add_argument("--name", help="Name of the installation, only useful for 'report'")
 
     args = parser.parse_args()
@@ -686,7 +725,6 @@ def main():
     else:
         graph = compute_graph(packages)
 
-
     if args.how == "graph":
         dot = graph_to_dot(graph, sizes=args.sizes, highlights=args.highlight)
         output = dot_to_graph_svg(dot)
@@ -707,7 +745,6 @@ def main():
         output = size(base_size)
 
     if args.how == "report":
-
         base_pkg_list = graph_to_package_list(graph, sizes=args.sizes)
 
         base_size = 0
@@ -717,7 +754,7 @@ def main():
         base_name = "Base installation"
         if args.name:
             base_name = args.name
-        
+
         base = {
             "name": base_name,
             "size": size(base_size),
@@ -727,7 +764,6 @@ def main():
         images = []
         if args.add:
             for installation in args.add:
-
                 install_name = installation[0]
                 install_what = installation[1]
 
@@ -750,14 +786,13 @@ def main():
                     this_size += pkg["size"]
 
                 image = {
-                    "name" : install_name,
-                    "size" : size(this_size),
+                    "name": install_name,
+                    "size": size(this_size),
                     "pkgs_in_base": pkgs_in_base,
                     "pkgs_not_in_base": pkgs_not_in_base,
-                    "packages": pkg_list
-                    }
+                    "packages": pkg_list,
+                }
                 images.append(image)
-
 
         extra_pkgs = []
         for image in images:
@@ -765,24 +800,15 @@ def main():
         extra_pkgs = list(set(extra_pkgs))
         extra_pkgs.sort()
 
-
         template = jinja2.Template(get_template())
         output = template.render(base=base, images=images, extra_pkgs=extra_pkgs)
-
 
     if args.where:
         with open(args.where, "w") as outfile:
             outfile.write(output)
     else:
-        print (output)
+        print(output)
 
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-

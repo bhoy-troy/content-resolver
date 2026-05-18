@@ -35,12 +35,12 @@ def all_configs():
 def test_load_all_configs_without_filter(all_configs):
     """Test loading all configs without filtering."""
     assert all_configs is not None
-    assert len(all_configs['repos']) == 3
-    assert len(all_configs['envs']) == 3
-    assert len(all_configs['workloads']) == 8
-    assert len(all_configs['views']) == 3
+    assert len(all_configs["repos"]) == 3
+    assert len(all_configs["envs"]) == 3
+    assert len(all_configs["workloads"]) == 8
+    assert len(all_configs["views"]) == 3
     # Labels are not loaded as separate entities in test_configs
-    assert 'labels' in all_configs
+    assert "labels" in all_configs
 
 
 def test_filter_single_label_reduces_configs(all_configs):
@@ -50,10 +50,10 @@ def test_filter_single_label_reduces_configs(all_configs):
     filtered_configs = config_manager.get_configs()
 
     # Verify filtering reduced counts
-    assert len(filtered_configs['workloads']) <= len(all_configs['workloads'])
-    assert len(filtered_configs['views']) <= len(all_configs['views'])
-    assert len(filtered_configs['envs']) <= len(all_configs['envs'])
-    assert len(filtered_configs['repos']) <= len(all_configs['repos'])
+    assert len(filtered_configs["workloads"]) <= len(all_configs["workloads"])
+    assert len(filtered_configs["views"]) <= len(all_configs["views"])
+    assert len(filtered_configs["envs"]) <= len(all_configs["envs"])
+    assert len(filtered_configs["repos"]) <= len(all_configs["repos"])
 
 
 def test_filter_single_label_expected_counts(all_configs):
@@ -63,10 +63,10 @@ def test_filter_single_label_expected_counts(all_configs):
     filtered_configs = config_manager.get_configs()
 
     # Verify specific expected results for 'eln' label
-    assert len(filtered_configs['repos']) == 1
-    assert len(filtered_configs['envs']) == 1
-    assert len(filtered_configs['workloads']) == 5
-    assert len(filtered_configs['views']) == 2
+    assert len(filtered_configs["repos"]) == 1
+    assert len(filtered_configs["envs"]) == 1
+    assert len(filtered_configs["workloads"]) == 5
+    assert len(filtered_configs["views"]) == 2
 
 
 def test_filter_multiple_labels(all_configs):
@@ -76,12 +76,12 @@ def test_filter_multiple_labels(all_configs):
     filtered_configs = config_manager.get_configs()
 
     # Verify we got configs matching our labels
-    assert len(filtered_configs['workloads']) > 0 or len(filtered_configs['views']) > 0
+    assert len(filtered_configs["workloads"]) > 0 or len(filtered_configs["views"]) > 0
 
     # Verify specific expected results
-    assert len(filtered_configs['workloads']) == 7
-    assert len(filtered_configs['envs']) == 2
-    assert len(filtered_configs['views']) == 3
+    assert len(filtered_configs["workloads"]) == 7
+    assert len(filtered_configs["envs"]) == 2
+    assert len(filtered_configs["views"]) == 3
 
 
 def test_filter_multiple_labels_includes_all_matching(all_configs):
@@ -95,8 +95,8 @@ def test_filter_multiple_labels_includes_all_matching(all_configs):
     multi_configs = config_manager_multi.get_configs()
 
     # Multiple labels should include at least as many workloads as single label
-    assert len(multi_configs['workloads']) >= len(eln_configs['workloads'])
-    assert len(multi_configs['views']) >= len(eln_configs['views'])
+    assert len(multi_configs["workloads"]) >= len(eln_configs["workloads"])
+    assert len(multi_configs["views"]) >= len(eln_configs["views"])
 
 
 @pytest.mark.parametrize("label", ["eln", "eln-extras", "fedora"])
@@ -111,8 +111,8 @@ def test_individual_labels(all_configs, label):
     assert isinstance(filtered_configs, dict)
 
     # Should not exceed original counts
-    assert len(filtered_configs['workloads']) <= len(all_configs['workloads'])
-    assert len(filtered_configs['views']) <= len(all_configs['views'])
+    assert len(filtered_configs["workloads"]) <= len(all_configs["workloads"])
+    assert len(filtered_configs["views"]) <= len(all_configs["views"])
 
 
 def test_filter_nonexistent_label_does_not_crash():
@@ -133,8 +133,16 @@ def test_filter_preserves_config_structure():
     filtered_configs = config_manager.get_configs()
 
     # Verify all expected top-level keys exist
-    expected_keys = ['repos', 'envs', 'workloads', 'views', 'labels',
-                     'unwanteds', 'buildroots', 'buildroot_pkg_relations']
+    expected_keys = [
+        "repos",
+        "envs",
+        "workloads",
+        "views",
+        "labels",
+        "unwanteds",
+        "buildroots",
+        "buildroot_pkg_relations",
+    ]
     for key in expected_keys:
         assert key in filtered_configs, f"Missing expected key: {key}"
         assert isinstance(filtered_configs[key], dict), f"Key {key} should be a dict"
@@ -148,5 +156,5 @@ def test_filter_with_whitespace_in_labels():
 
     # Should work the same as without whitespace
     assert filtered_configs is not None
-    assert len(filtered_configs['workloads']) == 7
-    assert len(filtered_configs['views']) == 3
+    assert len(filtered_configs["workloads"]) == 7
+    assert len(filtered_configs["views"]) == 3

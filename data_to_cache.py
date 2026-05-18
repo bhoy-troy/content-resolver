@@ -8,7 +8,6 @@
 # Use feedback_pipeline.py with the --use-cache option.
 
 import json
-import os
 
 
 class SetEncoder(json.JSONEncoder):
@@ -17,13 +16,14 @@ class SetEncoder(json.JSONEncoder):
             return list(obj)
         return json.JSONEncoder.default(self, obj)
 
+
 def dump_data(path, data):
-    with open(path, 'w') as file:
+    with open(path, "w") as file:
         json.dump(data, file, cls=SetEncoder)
 
 
 def load_data(path):
-    with open(path, 'r') as file:
+    with open(path) as file:
         data = json.load(file)
     return data
 

@@ -36,9 +36,10 @@ jobs:
           python3-jinja2 \
           python3-koji \
           python3-yaml \
-          python3-dnf \
+          python3-libdnf5 \
           python3-pytest \
-          python3-flake8
+          python3-flake8 \
+          python3-pip
 
     - name: Clean up
       run: dnf clean all
@@ -47,6 +48,19 @@ jobs:
       run: |
         python3 --version
         echo "Python location: $(which python3)"
+
+    - name: Install ruff
+      run: pip3 install --user ruff
+
+    - name: Run ruff format check
+      run: |
+        export PATH="$HOME/.local/bin:$PATH"
+        ruff format --check .
+
+    - name: Run ruff linting
+      run: |
+        export PATH="$HOME/.local/bin:$PATH"
+        ruff check .
 
     - name: Create output directory
       run: mkdir -p output/history

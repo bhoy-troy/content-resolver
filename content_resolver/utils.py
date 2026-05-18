@@ -2,8 +2,9 @@ import datetime
 import json
 import re
 import sys
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any, Iterator
+from typing import Any
 from urllib.parse import urlparse
 
 import jinja2
@@ -20,7 +21,7 @@ class SetEncoder(json.JSONEncoder):
 
 
 def load_data(path: str) -> Any:
-    with open(path, "r") as file:
+    with open(path) as file:
         data = json.load(file)
     return data
 
@@ -48,7 +49,7 @@ def size(num: float, suffix: str = "B") -> str:
         if abs(num) < 1024.0:
             return "%3.1f %s%s" % (num, unit, suffix)
         num /= 1024.0
-    return "%.1f %s%s" % (num, 'T', suffix)
+    return "%.1f %s%s" % (num, "T", suffix)
 
 
 def workload_id_to_conf_id(workload_id: str) -> str:
@@ -79,12 +80,12 @@ def url_to_id(url: str) -> str:
     parsed = urlparse(url)
 
     # Combine netloc (domain/port) and path, strip trailing slashes
-    url_part = (parsed.netloc + parsed.path).rstrip('/')
+    url_part = (parsed.netloc + parsed.path).rstrip("/")
 
     # Replace all non-alphanumeric characters with -
     regex = re.compile("[^0-9a-zA-Z]")
     # The + in the regex collapses consecutive non-alphanumeric chars into one hyphen
-    return regex.sub("-", url_part).strip('-')
+    return regex.sub("-", url_part).strip("-")
 
 
 def datetime_now_string() -> str:

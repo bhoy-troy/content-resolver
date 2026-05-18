@@ -7,20 +7,21 @@ import requests
 
 def log(msg):
     pass
-    #print(msg)
+    # print(msg)
 
-def load_data(path):
-    with open(path, 'r') as file:
+
+def load_data(path: str) -> Any:
+    with open(path) as file:
         data = json.load(file)
     return data
 
 
-def pkg_id_to_name(pkg_id):
-    pkg_name = pkg_id.rsplit("-",2)[0]
+def pkg_id_to_name(pkg_id: str) -> str:
+    pkg_name = pkg_id.rsplit("-", 2)[0]
     return pkg_name
 
 
-def real_repo_name(repo_name):
+def real_repo_name(repo_name: str) -> str:
     repos = {
         "BaseOS": "BaseOS",
         "AppStream": "AppStream",
@@ -29,52 +30,45 @@ def real_repo_name(repo_name):
         "NFV": "NFV",
         "RT": "RT",
         "SAP": "SAP",
-        "SAPHANA": "SAPHANA"
+        "SAPHANA": "SAPHANA",
     }
 
     return repos[repo_name]
 
 
-def load_settings():
-    settings = {}
-
-    settings["allowed_arches"] = ["aarch64","ppc64le","s390x","x86_64"]
-
-    settings["repos"] = {
-        "BaseOS": ["aarch64", "ppc64le", "s390x", "x86_64"],
-        "AppStream": ["aarch64", "ppc64le", "s390x", "x86_64"],
-        "CRB": ["aarch64", "ppc64le", "s390x", "x86_64"],
-        "buildroot-only": ["aarch64", "ppc64le", "s390x", "x86_64"],
-        "HA": ["aarch64", "ppc64le", "s390x", "x86_64"],
-        "NFV": ["x86_64"],
-        "RT": ["x86_64"],
-        "SAP": ["ppc64le", "s390x", "x86_64"],
-        "SAPHANA": ["ppc64le", "x86_64"]
+def load_settings() -> str:
+    settings = {
+        "allowed_arches": ["aarch64", "ppc64le", "s390x", "x86_64"],
+        "repos": {
+            "BaseOS": ["aarch64", "ppc64le", "s390x", "x86_64"],
+            "AppStream": ["aarch64", "ppc64le", "s390x", "x86_64"],
+            "CRB": ["aarch64", "ppc64le", "s390x", "x86_64"],
+            "buildroot-only": ["aarch64", "ppc64le", "s390x", "x86_64"],
+            "HA": ["aarch64", "ppc64le", "s390x", "x86_64"],
+            "NFV": ["x86_64"],
+            "RT": ["x86_64"],
+            "SAP": ["ppc64le", "s390x", "x86_64"],
+            "SAPHANA": ["ppc64le", "x86_64"],
+        },
+        "repo_names_sorted_for_print": [
+            "BaseOS",
+            "AppStream",
+            "CRB",
+            "buildroot-only",
+            "HA",
+            "NFV",
+            "RT",
+            "SAP",
+            "SAPHANA",
+        ],
+        "addon_repos": [
+            "HA",
+            "NFV",
+            "RT",
+            "SAP",
+            "SAPHANA",
+        ],
     }
-
-    settings["repo_names_sorted_for_print"] = [
-        "BaseOS",
-        "AppStream",
-        "CRB",
-        "buildroot-only",
-        "HA",
-        "NFV",
-        "RT",
-        "SAP",
-        "SAPHANA",
-    ]
-
-    settings["addon_repos"] = [
-        "HA",
-        "NFV",
-        "RT",
-        "SAP",
-        "SAPHANA",
-    ]
-
-    return settings
-
-
 
 
 #   "pcre2-10.40-1.eln120.1": {
@@ -137,18 +131,18 @@ def main():
             if "placeholder" in pkg_data["arches_arches"][arch]:
                 if len(pkg_data["arches_arches"][arch]) == 1:
                     continue
-                
+
                 non_placeholder_arches = set()
                 for rpm_arch in pkg_data["arches_arches"][arch]:
                     if rpm_arch == "placeholder":
                         continue
                     non_placeholder_arches.add(rpm_arch)
-                
+
                 pkg_data["arches_arches"][arch] = list(non_placeholder_arches)
 
                 del non_placeholder_arches
 
-            # Init 
+            # Init
             if pkg_name not in pkgs_data[arch]:
                 pkgs_data[arch][pkg_name] = {}
 
@@ -165,7 +159,6 @@ def main():
                 # need to know who wanted what.
                 pkgs_data[arch][pkg_name]["user_repo_wishes"] = set()
 
-            
             # Dependencies
             for dep_id in pkg_data["hard_dependency_of_pkg_nevrs"]:
                 dep_name = pkg_id_to_name(dep_id)
@@ -183,14 +176,13 @@ def main():
             #
             if pkg_data["level_number"] < pkgs_data[arch][pkg_name]["level_number"]:
                 pkgs_data[arch][pkg_name]["level_number"] = pkg_data["level_number"]
-        
+
     log("  Original NVRs: {}".format(len(downloaded_pkg_data["pkgs"])))
     log("  Names:")
     for arch, pkgs in pkgs_data.items():
-        log("    {}:    {}".format(arch, len(pkgs)))
+        log(f"    {arch}:    {len(pkgs)}")
     log("Done!")
     log("")
-
 
     # Initiate the repos
 
@@ -212,7 +204,6 @@ def main():
     log("Done!")
     log("")
 
-
     # Record wishes
     #
     # This adds repo names into pkgs_data[arch][pkg_name]["user_repo_wishes"]
@@ -221,7 +212,6 @@ def main():
     log("Recording people's wishes...")
 
     wishes_hardcoded = {
-
         # I found these in this in an old file here:
         # https://github.com/minimization/content-resolver-input/blob/main/configs/eln-repo-split.yaml
         # It's a start!
@@ -279,10 +269,8 @@ def main():
             "systemd",
             "yum",
         ],
-
         # It's the default, so leaving it empty
-        "AppStream" : [],
-
+        "AppStream": [],
         # These are packages in CRB in ELN at the time of writing the script
         # and at the same time explicitly required in workloads
         "CRB": [
@@ -470,7 +458,6 @@ def main():
             "xmltoman",
             "zlib-static",
         ],
-
         # all in this repo in ELN at the time of writing this script
         "HA": [
             "booth",
@@ -559,7 +546,6 @@ def main():
             "sbd",
             "spausedd",
         ],
-
         # all in this repo in ELN at the time of writing this script
         "RT": [
             "kernel-rt",
@@ -577,7 +563,6 @@ def main():
             "rteval-loads",
             "tuned-profiles-realtime",
         ],
-
         # all in this repo in ELN at the time of writing this script
         "NFV": [
             "kernel-rt",
@@ -600,7 +585,6 @@ def main():
             "tuned-profiles-nfv-host",
             "tuned-profiles-realtime",
         ],
-
         # all in this repo in ELN at the time of writing this script
         "SAP": [
             "compat-locales-sap",
@@ -611,7 +595,6 @@ def main():
             "vhostmd",
             "vm-dump-metrics",
         ],
-
         # all in this repo in ELN at the time of writing this script
         "SAPHANA": [
             "resource-agents-sap-hana",
@@ -620,22 +603,21 @@ def main():
             "tuned-profiles-sap-hana",
             "vhostmd",
             "vm-dump-metrics",
-        ]
+        ],
     }
 
     for arch, pkg_names in pkgs_data.items():
         for pkg_name in pkg_names:
             for wish_repo_name, wish_pkg_names in wishes_hardcoded.items():
-
                 if pkg_name not in wish_pkg_names:
                     continue
 
                 if wish_repo_name not in settings["repos"]:
-                    log("ERROR: {}: {} repo is unknown".format(pkg_name, wish_repo_name))
+                    log(f"ERROR: {pkg_name}: {wish_repo_name} repo is unknown")
                     continue
 
                 if arch not in settings["repos"][wish_repo_name]:
-                    log("ERROR: {}: {} repo doesn't have {}".format(pkg_name, wish_repo_name, arch))
+                    log(f"ERROR: {pkg_name}: {wish_repo_name} repo doesn't have {arch}")
                     continue
 
                 pkgs_data[arch][pkg_name]["user_repo_wishes"].add(wish_repo_name)
@@ -644,17 +626,15 @@ def main():
     log("Done!")
     log("")
 
-
     # Do the sorting based on what people want
 
     log("Doing the sorting based on what people want...")
 
     for arch, arch_pkgs_data in pkgs_data.items():
-        log("  {}...".format(arch))
+        log(f"  {arch}...")
 
         # First the packages themselves, not the deps
         for pkg_name, pkg_data in arch_pkgs_data.items():
-
             # Runtime package processing
             if pkg_data["level_number"] == 0:
                 if "BaseOS" in pkg_data["user_repo_wishes"]:
@@ -668,11 +648,9 @@ def main():
         # And now the deps
         moved_deps = set()
         while True:
-
             moved_deps_len = len(moved_deps)
 
             for pkg_name, pkg_data in arch_pkgs_data.items():
-
                 # Runtime package processing
                 if pkg_data["level_number"] == 0:
                     for required_by in pkg_data["required_by"]:
@@ -690,13 +668,12 @@ def main():
             # If no more packages have been moved, stop
             if moved_deps_len == len(moved_deps):
                 break
-    
+
         del moved_deps
         del moved_deps_len
 
     log("Done!")
     log("")
-
 
     # Default placement:
     # - everything that's runtime (Environment, Required, Dependency) goes to AppStream
@@ -705,15 +682,14 @@ def main():
     log("Put everything else in its default place")
 
     for arch, arch_repos in repos.items():
-        log("  {}...".format(arch))
+        log(f"  {arch}...")
 
         # See what's already in a repo
         pkgs_in_repos = set()
-        for repo_name, repo_pkgs in arch_repos.items():
+        for _repo_name, repo_pkgs in arch_repos.items():
             pkgs_in_repos.update(repo_pkgs)
-        
-        for pkg_name, pkg_data in pkgs_data[arch].items():
 
+        for pkg_name, pkg_data in pkgs_data[arch].items():
             # Skip everything that's already in a repo
             if pkg_name in pkgs_in_repos:
                 continue
@@ -725,12 +701,11 @@ def main():
             # Buildroot package processing
             else:
                 repos[arch]["buildroot-only"].add(pkg_name)
-        
+
         del pkgs_in_repos
 
     log("Done!")
     log("")
-
 
     # Separate CRB
     # Yep, some workloads are meant to be in CRB. So let's just do that.
@@ -739,18 +714,18 @@ def main():
 
     log("Pulling out CRB")
 
-    for arch, arch_repos in repos.items():
-        log("  {}...".format(arch))
+    for arch, _arch_repos in repos.items():
+        log(f"  {arch}...")
 
         # Put all packages the users want in CRB here
         crb_packages = set()
 
         for pkg_name in repos[arch]["AppStream"]:
             pkg_data = pkgs_data[arch][pkg_name]
-            
+
             if "CRB" in pkg_data["user_repo_wishes"]:
                 crb_packages.add(pkg_name)
-        
+
         # Validate it's possible. That means packages in
         # 'crb_packages' can only be required by packages
         # in 'crb_packages'. If that's not the case,
@@ -758,7 +733,6 @@ def main():
         crb_packages_impossible = set()
 
         while True:
-
             crb_packages_impossible_len = len(crb_packages_impossible)
 
             for pkg_name in crb_packages:
@@ -767,17 +741,17 @@ def main():
                 for required_by in pkg_data["required_by"]:
                     if required_by not in crb_packages:
                         crb_packages_impossible.add(pkg_name)
-                
+
                 del pkg_data
-            
+
             crb_packages = crb_packages - crb_packages_impossible
-            
+
             # If no more changes, end the while loop
             if crb_packages_impossible_len == len(crb_packages_impossible):
                 break
-        
+
         del crb_packages_impossible
-        
+
         repos[arch]["AppStream"] = repos[arch]["AppStream"] - crb_packages
         repos[arch]["CRB"].update(crb_packages)
 
@@ -786,9 +760,8 @@ def main():
         # because the default behavior for these is to be in AppStream.
 
         while True:
-
             crb_packages_len = len(crb_packages)
-        
+
             for pkg_name in repos[arch]["AppStream"]:
                 pkg_data = pkgs_data[arch][pkg_name]
 
@@ -800,10 +773,10 @@ def main():
                 for required_by in pkg_data["required_by"]:
                     if required_by in repos[arch]["AppStream"]:
                         crb_candidate = False
-                
+
                 if crb_candidate:
                     crb_packages.add(pkg_name)
-                
+
                 del crb_candidate
                 del pkg_data
 
@@ -813,13 +786,12 @@ def main():
             # If nothing else has been pulled out, end the while loop
             if crb_packages_len == len(crb_packages):
                 break
-        
+
         del crb_packages
         del crb_packages_len
 
     log("Done!")
     log("")
-    
 
     # Moving packages from buildroot-only to CRB if any other package from
     # the same SRPM is in BaseOS, AppStream, or CRB
@@ -827,7 +799,7 @@ def main():
     log("Moving packages from buildroot-only to CRB...")
 
     for arch, arch_pkgs_data in pkgs_data.items():
-        log("  {}...".format(arch))
+        log(f"  {arch}...")
 
         shipped_srpm_names = set()
         rpms_to_move = set()
@@ -839,7 +811,7 @@ def main():
             for pkg_name in repo_pkgs:
                 srpm_name = pkgs_data[arch][pkg_name]["source_name"]
                 shipped_srpm_names.add(srpm_name)
-        
+
         del repo_pkgs
 
         # And find RPMs of those SRPMs in buildroot-only
@@ -862,11 +834,9 @@ def main():
         # Move the deps
         moved_deps = set()
         while True:
-
             moved_deps_len = len(moved_deps)
 
             for pkg_name, pkg_data in arch_pkgs_data.items():
-
                 if pkg_name not in repos[arch]["buildroot-only"]:
                     continue
 
@@ -885,35 +855,31 @@ def main():
     log("Done!")
     log("")
 
-
     # Addons
 
     log("Separating addons (HA, NFV, RS, RT, SAP, SAPHANA)")
 
     for arch, arch_pkgs_data in pkgs_data.items():
-        log("  {}...".format(arch))
+        log(f"  {arch}...")
 
         removed_addon_pkgs = set()
 
         for pkg_name, pkg_data in arch_pkgs_data.items():
-
             # I only want to deal with AppStream packages here
             if pkg_name not in repos[arch]["AppStream"]:
                 continue
 
             for repo_wish in pkg_data["user_repo_wishes"]:
                 if repo_wish in settings["addon_repos"]:
-
                     repos[arch][repo_wish].add(pkg_name)
 
                     # If it's in BaseOS, something requires it, so it can't be removed
                     if pkg_name in repos[arch]["BaseOS"]:
                         continue
-                    
+
                     repos[arch]["AppStream"].discard(pkg_name)
                     removed_addon_pkgs.add(pkg_name)
 
-        
         # If they're needed in the main repos,
         # add them back to the main repos
         returned_addon_pkgs = set()
@@ -927,7 +893,7 @@ def main():
                     if required_by in repos[arch]["AppStream"]:
                         repos[arch]["AppStream"].add(pkg_name)
                         returned_addon_pkgs.add(pkg_name)
-            
+
             if returned_addon_pkgs_len == len(returned_addon_pkgs):
                 break
 
@@ -939,41 +905,33 @@ def main():
     log("Done!")
     log("")
 
-
     # Printing
 
     log("")
     log("Wheeeeeeeee!")
     log("")
 
-    all_pkgs = set()
-
     for arch, arch_repos in repos.items():
         log(arch)
         for repo, repo_pkgs in arch_repos.items():
-            log("  {}:  {}".format(repo, len(repo_pkgs)))
+            log(f"  {repo}:  {len(repo_pkgs)}")
         log("")
-
-    
-
 
     # Print the prepopulate.json
 
     prepopulate_json = {}
 
     for arch, arch_repos in repos.items():
-
         for repo_name, repo_pkgs in arch_repos.items():
-            
             if repo_name == "buildroot-only":
                 continue
-                
+
             if real_repo_name(repo_name) not in prepopulate_json:
                 prepopulate_json[real_repo_name(repo_name)] = {}
-            
+
             if arch not in prepopulate_json[real_repo_name(repo_name)]:
                 prepopulate_json[real_repo_name(repo_name)][arch] = {}
-            
+
             for pkg_name in repo_pkgs:
                 pkg_data = pkgs_data[arch][pkg_name]
                 srpm_name = pkg_data["source_name"]
@@ -984,16 +942,10 @@ def main():
                     prepopulate_json[real_repo_name(repo_name)][arch][srpm_name] = []
 
                 for rpm_arch in rpm_arches:
-                    pkg_name_dot_arch = "{name}.{rpm_arch}".format(
-                        name=pkg_name,
-                        rpm_arch=rpm_arch
-                    )
+                    pkg_name_dot_arch = f"{pkg_name}.{rpm_arch}"
                     prepopulate_json[real_repo_name(repo_name)][arch][srpm_name].append(pkg_name_dot_arch)
 
-    
     print(json.dumps(prepopulate_json, indent=4))
-
-
 
 
 if __name__ == "__main__":

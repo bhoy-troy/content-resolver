@@ -28,10 +28,24 @@ jobs:
           python3-koji \
           python3-pytest \
           python3-flake8 \
-          python3-libdnf5
+          python3-libdnf5 \
+          python3-pip
 
     - name: Clean up
       run: dnf clean all
+
+    - name: Install ruff
+      run: pip3 install --user ruff
+
+    - name: Run ruff format check
+      run: |
+        export PATH="$HOME/.local/bin:$PATH"
+        ruff format --check .
+
+    - name: Run ruff linting
+      run: |
+        export PATH="$HOME/.local/bin:$PATH"
+        ruff check .
 
     - name: Create output dir
       run: mkdir -p output/history
