@@ -1,0 +1,91 @@
+services:
+  # Main service - runs content resolver automatically
+  content-resolver-dnf5:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: content-resolver-local:latest
+    container_name: content-resolver-dnf5
+    working_dir: /workspace
+
+
+    volumes:
+      - .:/workspace:z
+      - ./dnf-cache:/dnf_cachedir
+      #  used to run docker within docker
+      - /var/run/docker.sock:/var/run/docker.sock
+
+
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=2g
+
+    cap_add:
+      - CAP_SYS_CHROOT
+
+    environment:
+      - TZ=UTC
+      - PYTHONUNBUFFERED=1
+#      used to run docker within docker
+      - DOCKER_HOST=unix:///var/run/docker.sock
+
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 4G
+    command: bash -c "./refresh-local.sh"
+
+#    command: >
+#       bash -c "
+#          mkdir -p output/history out/history &&
+#          ./content_resolver.py --labels eln --dnf-cache-dir /dnf_cachedir  content-resolver-input/configs out
+#       "
+
+
+    security_opt:
+      - label=disable
+    network_mode: bridge
+
+  # For interactive shell, override with: docker-compose up content-resolver-dnf5-tty
+  content-resolver-dnf5-tty:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: content-resolver-local:latest
+    container_name: content-resolver-dnf5-tty
+    working_dir: /workspace
+
+    volumes:
+      - .:/workspace:z
+      - dnf-cache:/dnf_cachedir
+      - /var/run/docker.sock:/var/run/docker.sock
+
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=2g
+
+    cap_add:
+      - CAP_SYS_CHROOT
+
+    environment:
+      - TZ=UTC
+      - PYTHONUNBUFFERED=1
+      - DOCKER_HOST=unix:///var/run/docker.sock
+#      - TERM=xterm-256color
+
+#    used to keep tty active, otherwise container will just exit after executing bash cmd
+    stdin_open: true
+    tty: true
+
+    command:  bash
+    security_opt:
+      - label=disable
+    network_mode: bridge
+
+volumes:
+  dnf-cache:
+    driver: local
+
+networks:
+  default:
+    name: content-resolver-network

@@ -144,3 +144,47 @@ $ docker run --rm -it --tmpfs /dnf_cachedir -v $(pwd):/workspace content-resolve
 ```
 
 The output will be generated in the `output` directory. Open the `output/index.html` in your web browser of choice to see the result.
+
+### Option 3: using Docker Compose:
+
+
+##### To run the application automatically
+```
+$ docker-compose up content-resolver-dnf5
+```
+
+... which starts a container executing content-resolver inside the container
+
+```
+# mkdir -p out/history
+# ./content_resolver.py --dev-buildroot --dnf-cache-dir /dnf_cachedir test_configs out
+```
+
+The output will be generated in the `output` directory. Open the `output/index.html` in your web browser of choice to see the result.
+
+To stop the container:
+
+```
+$ docker-compose down
+```
+
+##### For terminal based application
+```
+$ docker-compose up -d content-resolver-dnf5-tty
+$ docker exec -it content-resolver-dnf5-tty bash
+```
+
+... which starts a detached container with an interactive shell. And inside the container:
+
+```
+# mkdir -p out/history
+# ./content_resolver.py --dev-buildroot --dnf-cache-dir /dnf_cachedir test_configs out
+```
+
+The output will be generated in the `output` directory. Open the `out/index.html` in your web browser of choice to see the result.
+
+To stop the container:
+
+```
+$ docker-compose down
+```
