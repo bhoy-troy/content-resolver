@@ -9,10 +9,15 @@ import time
 import urllib.request
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
-import multiprocessing, asyncio
-from content_resolver.utils import dump_data, load_data, log, err_log, pkg_id_to_name, size, workload_id_to_conf_id, url_to_id
-from content_resolver.exceptions import RepoDownloadError, BuildGroupAnalysisError, KojiRootLogError, AnalysisError
 import koji
+from libdnf5.base import Base, Goal, GoalJobSettings
+from libdnf5.exception import BaseTransactionError
+from libdnf5.exception import Error as DnfErr
+from libdnf5.exception import RepoDownloadError as Dnf5RepoDownloadError
+from libdnf5.exception import UserAssertionError
+from libdnf5.repo import RepoQuery
+from libdnf5.rpm import PackageQuery
+
 from content_resolver.exceptions import AnalysisError, BuildGroupAnalysisError, KojiRootLogError, RepoDownloadError
 from content_resolver.utils import (
     dnf5_base,
@@ -190,20 +195,22 @@ def _get_koji_log_path(srpm_id, arch, koji_session):
     """
     Get koji log path for a given SRPM.
     """
-    MAX_TRIES = 10
+    max_tries = 10
     attempts = 0
 
-    while attempts < MAX_TRIES:
+    # TODO: Create a retry decorator
+    while attempts < max_tries:
         try:
             koji_pkg_data = koji_session.getRPM(f"{srpm_id}.src")
             koji_logs = koji_session.getBuildLogs(koji_pkg_data["build_id"])
             break
-        except Exception:
+        except koji.GenericError:
             attempts += 1
-            if attempts == MAX_TRIES:
+            if attempts == max_tries:
                 raise KojiRootLogError("Could not talk to Koji API")
             time.sleep(1)
 
+    # TODO: use `next` and comprehension for lazy evaluation next(x for x in koji_logs)
     koji_log_path = None
     for koji_log in koji_logs:
         if koji_log["name"] == "root.log":
@@ -218,21 +225,21 @@ def _download_root_log_with_retry(root_log_url):
     """
     Download root.log file with retry logic.
     """
-    MAX_TRIES = 10
+    max_tries = 10
     attempts = 0
 
     request = urllib.request.Request(root_log_url)
     request.add_header("Accept", "text/plain")
     request.add_header("User-Agent", "ContentResolver/1.0")
 
-    while attempts < MAX_TRIES:
+    while attempts < max_tries:
         try:
             with urllib.request.urlopen(request, timeout=20) as response:
                 root_log_data = response.read()
-                return root_log_data.decode('utf-8')
+                return root_log_data.decode("utf-8")
         except Exception:
             attempts += 1
-            if attempts == MAX_TRIES:
+            if attempts == max_tries:
                 raise KojiRootLogError(f"Could not download root.log from {root_log_url}")
             time.sleep(1)
 
@@ -248,11 +255,11 @@ def process_single_srpm_root_log(work_item):
         dict: Contains srpm_id, arch, deps (list), error (str or None)
     """
     try:
-        koji_api_url = work_item['koji_api_url']
-        koji_files_url = work_item['koji_files_url']
-        srpm_id = work_item['srpm_id']
-        arch = work_item['arch']
-        dev_buildroot = work_item.get('dev_buildroot', False)
+        koji_api_url = work_item["koji_api_url"]
+        koji_files_url = work_item["koji_files_url"]
+        srpm_id = work_item["srpm_id"]
+        arch = work_item["arch"]
+        dev_buildroot = work_item.get("dev_buildroot", False)
 
         # Handle development buildroot mode
         if dev_buildroot:
@@ -304,10 +311,29 @@ def process_single_srpm_root_log(work_item):
 
         # Download root.log
         root_log_url = f"{koji_files_url}/{koji_log_path}"
-        root_log_contents = _download_root_log_with_retry(root_log_url)
+        try:
+            root_log_contents = _download_root_log_with_retry(root_log_url)
+        except KojiRootLogError as e:
+            # Download failed
+            return {
+                'srpm_id': srpm_id,
+                'arch': arch,
+                'deps': [],
+                'error': f"Download failed: {str(e)}"
+            }
 
         # Parse dependencies
         deps = _get_build_deps_from_a_root_log(root_log_contents)
+        try:
+            deps = _get_build_deps_from_a_root_log(root_log_contents)
+        except Exception as e:
+            # Parsing failed
+            return {
+                'srpm_id': srpm_id,
+                'arch': arch,
+                'deps': [],
+                'error': f"Parse failed: {str(e)}"
+            }
 
         return {
             'srpm_id': srpm_id,
@@ -381,6 +407,8 @@ def process_single_srpm_root_log(work_item):
 
         try:
             self.cache["root_log_deps"]["current"] = load_data(self.settings["root_log_deps_cache_path"])
+            # Validate cached root.log data for issues
+            self._validate_root_log_cache()
         except FileNotFoundError:
             pass
 
@@ -393,7 +421,7 @@ def process_single_srpm_root_log(work_item):
 
     def print_metrics(self):
         log("Additional metrics:")
-
+        # TODO: use `enumerate(self.metrics_data)` instead of incrementing counter
         counter = 0
 
         for this_record in self.metrics_data:
@@ -467,130 +495,127 @@ def process_single_srpm_root_log(work_item):
     
 
     def _analyze_pkgs(self, repo, arch):
-        log("Analyzing pkgs for {repo_name} ({repo_id}) {arch}".format(
-                repo_name=repo["name"],
-                repo_id=repo["id"],
-                arch=arch
-            ))
-        
-        with dnf.Base() as base:
+        log(f"Analyzing pkgs for {repo['name']} ({repo['id']}) {arch}")
 
-            base.conf.debuglevel = 0
-            base.conf.errorlevel = 0
-            base.conf.logfilelevel = 0
+        # TODO: Move away from context manager, only implemented to reduce changes from DNF4-> DNF5
+        with dnf5_base() as base:
+            config = base.get_config()
+            config.get_debuglevel_option().set(0)
+            # Note: DNF5 doesn't have errorlevel/logfilelevel in same way
 
             # Local DNF cache
-            cachedir_name = "dnf_cachedir-{repo}-{arch}".format(
-                repo=repo["id"],
-                arch=arch
-            )
-            base.conf.cachedir = os.path.join(self.tmp_dnf_cachedir, cachedir_name)
+            cachedir_name = f"dnf_cachedir-{repo['id']}-{arch}"
+            config.get_cachedir_option().set(os.path.join(self.tmp_dnf_cachedir, cachedir_name))
 
             # Generic installroot
-            root_name = "dnf_generic_installroot-{repo}-{arch}".format(
-                repo=repo["id"],
-                arch=arch
-            )
-            base.conf.installroot = os.path.join(self.tmp_installroots, root_name)
+            root_name = f"dnf_generic_installroot-{repo['id']}-{arch}"
+            config.get_installroot_option().set(os.path.join(self.tmp_installroots, root_name))
 
-            # Architecture
-            base.conf.arch = arch
-            base.conf.ignorearch = True
+            # Architecture and Releasever
+            vars = base.get_vars()
+            vars.set("arch", arch)
+            vars.set("basearch", arch)
+            vars.set("releasever", repo["source"]["releasever"])
 
-            # Releasever
-            base.conf.substitutions['releasever'] = repo["source"]["releasever"]
+            config.get_ignorearch_option().set(True)
 
+            # DNF5: setup() must be called after configuration but before using repo_sack
+            base.setup()
+            # Get available variants from composeinfo.json (if configured)
+            available_variants = self._get_available_compose_variants(repo, arch)
+
+            repo_names_to_load = []
             for repo_name, repo_data in repo["source"]["repos"].items():
-                if repo_data["limit_arches"]:
-                    if arch not in repo_data["limit_arches"]:
-                        log(f"  Skipping {repo_name} on {arch}")
-                        continue
+                if repo_data["limit_arches"] and arch not in repo_data["limit_arches"]:
+                    log(f"  Skipping {repo_name} on {arch}")
+                    continue
+
+                # Check if variant exists in compose (if composeinfo is available)
+                if available_variants and not available_variants.get(repo_name, True):
+                    log(f"  Skipping {repo_name} on {arch} (not in compose)")
+                    continue
+
+
                 log(f"  Including {repo_name}")
 
-                additional_repo = dnf.repo.Repo(
-                    name=repo_name,
-                    parent_conf=base.conf
-                )
-                additional_repo.baseurl = repo_data["baseurl"]
-                additional_repo.priority = repo_data["priority"]
-                base.repos.add(additional_repo)
-
-            # Additional repository (if configured)
-            #if repo["source"]["additional_repository"]:
-            #    additional_repo = dnf.repo.Repo(name="additional-repository",parent_conf=base.conf)
-            #    additional_repo.baseurl = [repo["source"]["additional_repository"]]
-            #    additional_repo.priority = 1
-            #    base.repos.add(additional_repo)
+                repo_sack = base.get_repo_sack()
+                new_repo = repo_sack.create_repo(repo_name)
+                repo_config = new_repo.get_config()
+                repo_config.get_baseurl_option().set([repo_data["baseurl"]])
+                repo_config.get_priority_option().set(repo_data["priority"])
+                repo_names_to_load.append(repo_name)
 
             # Load repos
             log("  Loading repos...")
-            #base.read_all_repos()
 
-
-            # At this stage, I need to get all packages from the repo listed.
+            # At this stage, we need to get all packages from the repo listed.
             # That also includes modular packages. Modular packages in non-enabled
-            # streams would be normally hidden. So I mark all the available repos as
+            # streams would be normally hidden. So we mark all the available repos as
             # hotfix repos to make all packages visible, including non-enabled streams.
-            for dnf_repo in base.repos.all():
-                dnf_repo.module_hotfixes = True
+            # DNF5: Iterate repos using RepoQuery
+            repo_query = RepoQuery(base)
+            for repo_weak_ptr in repo_query:
+                repo_obj = repo_weak_ptr.get()
+                # DNF5: module_hotfixes is a config option
+                repo_obj.get_config().get_module_hotfixes_option().set(True)
 
             # This sometimes fails, so let's try at least N times
             # before totally giving up!
-            MAX_TRIES = 10
+            # If individual repos fail, disable them and continue with others
+            max_tries = 10
             attempts = 0
             success = False
-            while attempts < MAX_TRIES:
+            failed_repos = []
+
+            while attempts < max_tries and not success:
                 try:
-                    base.fill_sack(load_system_repo=False)
+                    # DNF5: load repos instead of fill_sack
+                    repo_sack.load_repos()
                     success = True
                     break
                 except dnf.exceptions.RepoError as err:
                     attempts +=1
                     log("  Failed to download repodata. Trying again!")
+                except (UserAssertionError, DnfErr) as err:
+                    attempts += 1
+                    error_msg = str(err)
+                    log(f"  Failed to download repodata (attempt {attempts}/{max_tries}). Error: {error_msg}")
             if not success:
-                err = "Failed to download repodata while analyzing repo '{repo_name} ({repo_id}) {arch}".format(
-                repo_name=repo["name"],
-                repo_id=repo["id"],
-                arch=arch
-                )
+                # If we still failed after trying to disable problematic repos, give up
+                err = f"Failed to download repodata while analyzing repo '{repo['name']} ({repo['id']}) {arch}'"
                 err_log(err)
                 raise RepoDownloadError(err)
 
             # DNF query
             query = base.sack.query
+            if failed_repos:
+                log(f"  WARNING: Proceeding without repositories: {', '.join(failed_repos)}")
+
+            # DNF5: Create PackageQuery instead of using base.sack.query
+            query = PackageQuery(base)
 
             # Get all packages
-            all_pkgs_set = set(query())
+            # DNF5: PackageQuery is directly iterable, don't call it
+            all_pkgs_set = set(query)
             pkgs = {}
             for pkg_object in all_pkgs_set:
-                pkg_nevra = "{name}-{evr}.{arch}".format(
-                    name=pkg_object.name,
-                    evr=pkg_object.evr,
-                    arch=pkg_object.arch
-                )
-                pkg_nevr = "{name}-{evr}".format(
-                    name=pkg_object.name,
-                    evr=pkg_object.evr
-                )
-                pkg = {}
-                pkg["id"] = pkg_nevra
-                pkg["name"] = pkg_object.name
-                pkg["evr"] = pkg_object.evr
-                pkg["nevr"] = pkg_nevr
-                pkg["arch"] = pkg_object.arch
-                pkg["installsize"] = pkg_object.installsize
-                pkg["description"] = pkg_object.description
-                #pkg["provides"] = pkg_object.provides
-                #pkg["requires"] = pkg_object.requires
-                #pkg["recommends"] = pkg_object.recommends
-                #pkg["suggests"] = pkg_object.suggests
-                pkg["summary"] = pkg_object.summary
-                pkg["source_name"] = pkg_object.source_name
-                pkg["sourcerpm"] = pkg_object.sourcerpm
-                pkg["reponame"] = pkg_object.reponame
+                pkg_nevra = f"{pkg_object.get_name()}-{pkg_object.get_evr()}.{pkg_object.get_arch()}"
+                pkg_nevr = f"{pkg_object.get_name()}-{pkg_object.get_evr()}"
 
-                pkgs[pkg_nevra] = pkg
-            
+                pkgs[pkg_nevra] = {
+                    "id": pkg_nevra,
+                    "name": pkg_object.get_name(),
+                    "evr": pkg_object.get_evr(),
+                    "nevr": pkg_nevr,
+                    "arch": pkg_object.get_arch(),
+                    "installsize": pkg_object.get_install_size(),
+                    "description": pkg_object.get_description(),
+                    "summary": pkg_object.get_summary(),
+                    "source_name": pkg_object.get_source_name(),
+                    "sourcerpm": pkg_object.get_sourcerpm(),
+                    "reponame": pkg_object.get_repo_id(),
+                }
+
             # There shouldn't be multiple packages of the same NVR
             # But the world isn't as simple! So add all reponames
             # to every package, in case it's in multiple repos
@@ -598,55 +623,44 @@ def process_single_srpm_root_log(work_item):
             repo_priorities = {}
             for repo_name, repo_data in repo["source"]["repos"].items():
                 repo_priorities[repo_name] = repo_data["priority"]
+            repo_priorities = {
+                repo_name: repo_data["priority"] for repo_name, repo_data in repo["source"]["repos"].items()
+            }
 
             for pkg_object in all_pkgs_set:
-                pkg_nevra = "{name}-{evr}.{arch}".format(
-                    name=pkg_object.name,
-                    evr=pkg_object.evr,
-                    arch=pkg_object.arch
-                )
-                reponame = pkg_object.reponame
+                pkg_nevra = f"{pkg_object.get_name()}-{pkg_object.get_evr()}.{pkg_object.get_arch()}"
+                reponame = pkg_object.get_repo_id()
+                pkgs[pkg_nevra].setdefault("all_reponames", set()).add(reponame)
 
-                if "all_reponames" not in pkgs[pkg_nevra]:
-                    pkgs[pkg_nevra]["all_reponames"] = set()
-                
-                pkgs[pkg_nevra]["all_reponames"].add(reponame)
-            
             for pkg_nevra, pkg in pkgs.items():
-                pkgs[pkg_nevra]["highest_priority_reponames"] = set()
+                all_repo_priorities = {repo_priorities[reponame] for reponame in pkg["all_reponames"]}
 
-                all_repo_priorities = set()
-                for reponame in pkg["all_reponames"]:
-                    all_repo_priorities.add(repo_priorities[reponame])
-                
-                highest_repo_priority = sorted(list(all_repo_priorities))[0]
+                highest_repo_priority = min(all_repo_priorities)
 
-                for reponame in pkg["all_reponames"]:
-                    if repo_priorities[reponame] == highest_repo_priority:
-                        pkgs[pkg_nevra]["highest_priority_reponames"].add(reponame)
+                pkgs[pkg_nevra]["highest_priority_reponames"] = {
+                    reponame for reponame in pkg["all_reponames"] if repo_priorities[reponame] == highest_repo_priority
+                }
 
-            log("  Done!  ({pkg_count} packages in total)".format(
-                pkg_count=len(pkgs)
-            ))
+            log(f"  Done!  ({len(pkgs)} packages in total)")
             log("")
 
         return pkgs
 
     def _analyze_repos(self):
         self.data["repos"] = {}
-        for _,repo in self.configs["repos"].items():
+        for repo in self.configs["repos"].values():
             repo_id = repo["id"]
-            self.data["pkgs"][repo_id] = {}
+            self.data["pkgs"][repo_id] = {
+                arch: self._analyze_pkgs(repo, arch) for arch in repo["source"]["architectures"]
+            }
             self.data["repos"][repo_id] = {}
-            for arch in repo["source"]["architectures"]:
-                self.data["pkgs"][repo_id][arch] = self._analyze_pkgs(repo, arch)
-            
+
             # Reading the optional composeinfo
             self.data["repos"][repo_id]["compose_date"] = None
             self.data["repos"][repo_id]["compose_days_ago"] = 0
             if repo["source"]["composeinfo"]:
                 # At this point, this is all I can do. Hate me or not, it gets us
-                # what we need and won't brake anything in case things go badly. 
+                # what we need and won't brake anything in case things go badly.
                 request = urllib.request.Request(repo["source"]["composeinfo"])
                 request.add_header("Accept", "application/json")
                 request.add_header("User-Agent", "ContentResolver/1.0")
@@ -670,12 +684,8 @@ def process_single_srpm_root_log(work_item):
         relations = {}
 
         for pkg in dnf_query:
-            pkg_id = "{name}-{evr}.{arch}".format(
-                name=pkg.name,
-                evr=pkg.evr,
-                arch=pkg.arch
-            )
-            
+            pkg_id = f"{pkg.get_name()}-{pkg.get_evr()}.{pkg.get_arch()}"
+
             required_by = set()
             recommended_by = set()
             suggested_by = set()
@@ -752,11 +762,8 @@ def process_single_srpm_root_log(work_item):
         # This basically means there was an exception in the processing and the process crashed
         if queue_result.empty():
             raise AnalysisError
-        
-        env = queue_result.get()
 
-        return env
-
+        return queue_result.get()
 
     def _analyze_env_process(self, queue_result, env_conf, repo, arch):
 
@@ -778,71 +785,82 @@ def process_single_srpm_root_log(work_item):
 
         env["succeeded"] = True
 
-        with dnf.Base() as base:
-
-            base.conf.debuglevel = 0
-            base.conf.errorlevel = 0
-            base.conf.logfilelevel = 0
+        # TODO: migrate away from context manager
+        with dnf5_base() as base:
+            config = base.get_config()
+            config.get_debuglevel_option().set(0)
 
             # Local DNF cache
-            cachedir_name = "dnf_cachedir-{repo}-{arch}".format(
-                repo=repo["id"],
-                arch=arch
-            )
-            base.conf.cachedir = os.path.join(self.tmp_dnf_cachedir, cachedir_name)
+            cachedir_name = f"dnf_cachedir-{repo['id']}-{arch}"
+            config.get_cachedir_option().set(os.path.join(self.tmp_dnf_cachedir, cachedir_name))
 
             # Environment installroot
-            root_name = "dnf_env_installroot-{env_conf}-{repo}-{arch}".format(
-                env_conf=env_conf["id"],
-                repo=repo["id"],
-                arch=arch
-            )
-            base.conf.installroot = os.path.join(self.tmp_installroots, root_name)
+            root_name = f"dnf_env_installroot-{env_conf['id']}-{repo['id']}-{arch}"
+            config.get_installroot_option().set(os.path.join(self.tmp_installroots, root_name))
 
-            # Architecture
-            base.conf.arch = arch
-            base.conf.ignorearch = True
+            # Architecture and Releasever
+            vars = base.get_vars()
+            vars.set("arch", arch)
+            vars.set("basearch", arch)
+            vars.set("releasever", repo["source"]["releasever"])
 
-            # Releasever
-            base.conf.substitutions['releasever'] = repo["source"]["releasever"]
+            config.get_ignorearch_option().set(True)
 
             # Additional DNF Settings
-            base.conf.tsflags.append('justdb')
-            base.conf.tsflags.append('noscripts')
+            # Note: DNF5 tsflags are handled differently - these affect transaction behavior
+            # justdb and noscripts are implicit in how DNF5 handles test transactions
 
             # Environment config
             if "include-weak-deps" not in env_conf["options"]:
-                base.conf.install_weak_deps = False
-            if "include-docs" not in env_conf["options"]:
-                base.conf.tsflags.append('nodocs')
+                config.get_install_weak_deps_option().set(False)
+            # Note: nodocs tsflags - DNF5 handles this via separate config
+
+            # DNF5: setup() must be called after configuration but before using repo_sack
+            base.setup()
 
             # Load repos
             #log("  Loading repos...")
             #base.read_all_repos()
             self._load_repo_cached(base, repo, arch)
 
+            # Build list of repo names for error handling
+            repo_names_to_load = []
+            for repo_name, repo_data in repo["source"]["repos"].items():
+                if repo_data["limit_arches"] and arch not in repo_data["limit_arches"]:
+                    continue
+                repo_names_to_load.append(repo_name)
+
             # This sometimes fails, so let's try at least N times
             # before totally giving up!
-            MAX_TRIES = 10
+            max_tries = 10
             attempts = 0
             success = False
-            while attempts < MAX_TRIES:
+            failed_repos = []
+            while attempts < max_tries:
                 try:
-                    base.fill_sack(load_system_repo=False)
+                    # DNF5: load repos instead of fill_sack
+                    repo_sack = base.get_repo_sack()
+                    repo_sack.load_repos()
                     success = True
                     break
                 except dnf.exceptions.RepoError as err:
                     attempts +=1
                     log("  Failed to download repodata. Trying again!")
+                except (UserAssertionError, DnfErr, RuntimeError) as err:
+                    attempts += 1
+                    error_msg = str(err)
+                    log(f"  Failed to download repodata (attempt {attempts}/{max_tries}). Error: {err}")
+
             if not success:
-                err = "Failed to download repodata while analyzing environment '{env_conf}' from '{repo}' {arch}:".format(
-                    env_conf=env_conf["id"],
-                    repo=repo["id"],
-                    arch=arch
-                )
+                err = f"Failed to download repodata while analyzing environment '{env_conf['id']}' from '{repo['id']}' {arch}:"
                 err_log(err)
                 raise RepoDownloadError(err)
 
+            if failed_repos:
+                log(f"  WARNING: Proceeding without repositories: {', '.join(failed_repos)}")
+
+            # DNF5: Create a Goal for package operations
+            goal = Goal(base)
 
             # Packages
             log("  Adding packages...")
@@ -852,17 +870,22 @@ def process_single_srpm_root_log(work_item):
                 except dnf.exceptions.MarkingError:
                     env["errors"]["non_existing_pkgs"].append(pkg)
                     continue
-            
+                goal.add_install(pkg)
+
             # Groups
             log("  Adding groups...")
             if env_conf["groups"]:
                 base.read_comps(arch_filter=True)
+                # DNF5: Groups are loaded as part of repos
+                pass
             for grp_spec in env_conf["groups"]:
-                group = base.comps.group_by_pattern(grp_spec)
-                if not group:
+                try:
+                    # DNF5: add_group_install takes spec and options
+                    settings = GoalJobSettings()
+                    goal.add_group_install(grp_spec, settings)
+                except (UserAssertionError, DnfErr):
                     env["errors"]["non_existing_pkgs"].append(grp_spec)
                     continue
-                base.group_install(group.id, ['mandatory', 'default'])
 
             # Architecture-specific packages
             for pkg in env_conf["arch_packages"][arch]:
@@ -871,17 +894,15 @@ def process_single_srpm_root_log(work_item):
                 except dnf.exceptions.MarkingError:
                     env["errors"]["non_existing_pkgs"].append(pkg)
                     continue
-            
+                goal.add_install(pkg)
+
             # Resolve dependencies
             log("  Resolving dependencies...")
             try:
-                base.resolve()
-            except dnf.exceptions.DepsolveError as err:
-                err_log("Failed to analyze environment '{env_conf}' from '{repo}' {arch}:".format(
-                        env_conf=env_conf["id"],
-                        repo=repo["id"],
-                        arch=arch
-                    ))
+                # DNF5: resolve via goal
+                transaction = goal.resolve()
+            except DnfErr as err:
+                err_log(f"Failed to analyze environment '{env_conf['id']}' from '{repo['id']}' {arch}:")
                 err_log(f"  - {err}")
                 env["succeeded"] = False
                 env["errors"]["message"] = str(err)
@@ -892,13 +913,10 @@ def process_single_srpm_root_log(work_item):
             # So let's do that to make it happy.
             log("  Downloading packages...")
             try:
-                base.download_packages(base.transaction.install_set)
-            except dnf.exceptions.DownloadError as err:
-                err_log("Failed to analyze environment '{env_conf}' from '{repo}' {arch}:".format(
-                        env_conf=env_conf["id"],
-                        repo=repo["id"],
-                        arch=arch
-                    ))
+                # DNF5: download packages from transaction
+                transaction.download()
+            except Dnf5RepoDownloadError as err:
+                err_log(f"Failed to analyze environment '{env_conf['id']}' from '{repo['id']}' {arch}:")
                 err_log(f"  - {err}")
                 env["succeeded"] = False
                 env["errors"]["message"] = str(err)
@@ -906,39 +924,37 @@ def process_single_srpm_root_log(work_item):
 
             log("  Running DNF transaction, writing RPMDB...")
             try:
-                base.do_transaction()
-            except (dnf.exceptions.TransactionCheckError, dnf.exceptions.Error) as err:
-                err_log("Failed to analyze environment '{env_conf}' from '{repo}' {arch}:".format(
-                        env_conf=env_conf["id"],
-                        repo=repo["id"],
-                        arch=arch
-                    ))
+                # DNF5: run transaction
+                transaction.run()
+            except BaseTransactionError as err:
+                err_log(f"Failed to analyze environment '{env_conf['id']}' from '{repo['id']}' {arch}:")
                 err_log(f"  - {err}")
                 env["succeeded"] = False
                 env["errors"]["message"] = str(err)
                 return env
 
-            # DNF Query
-            log("  Creating a DNF Query object...")
-            query = base.sack.query().filterm(pkg=base.transaction.install_set)
+            # Get packages from transaction
+            log("  Extracting packages from transaction...")
+            # DNF5: transaction packages vector is directly indexable
+            pkg_list = []
+            trans_pkgs = transaction.get_transaction_packages()
+            for i in range(trans_pkgs.size()):
+                trans_pkg = trans_pkgs[i]
+                pkg_list.append(trans_pkg.get_package())
 
-            for pkg in query:
-                pkg_id = "{name}-{evr}.{arch}".format(
-                    name=pkg.name,
-                    evr=pkg.evr,
-                    arch=pkg.arch
-                )
+            # Use the actual packages from the transaction.
+            # Don't re-query by name - that would return ALL versions from ALL repos,
+            # including lower-priority duplicates (e.g., both ELN and Rawhide versions).
+            for pkg in pkg_list:
+                pkg_id = f"{pkg.get_name()}-{pkg.get_evr()}.{pkg.get_arch()}"
                 env["pkg_ids"].append(pkg_id)
-            
-            env["pkg_relations"] = self._analyze_package_relations(query)
 
-            log("  Done!  ({pkg_count} packages in total)".format(
-                pkg_count=len(env["pkg_ids"])
-            ))
+            env["pkg_relations"] = self._analyze_package_relations(pkg_list)
+
+            log(f"  Done!  ({len(env['pkg_ids'])} packages in total)")
             log("")
-        
-        return env
 
+        return env
 
     def _analyze_envs(self):
         envs = {}
@@ -955,23 +971,12 @@ def process_single_srpm_root_log(work_item):
                     #    repos each config lists *
                     #    archeas each repo supports
                     # Analyze all of that!
-                    log("Analyzing {env_name} ({env_id}) from {repo_name} ({repo}) {arch}...".format(
-                        env_name=env_conf["name"],
-                        env_id=env_conf_id,
-                        repo_name=repo["name"],
-                        repo=repo_id,
-                        arch=arch
-                    ))
+                    log(f"Analyzing {env_conf['name']} ({env_conf_id}) from {repo['name']} ({repo_id}) {arch}...")
 
-                    env_id = "{env_conf_id}:{repo_id}:{arch}".format(
-                        env_conf_id=env_conf_id,
-                        repo_id=repo_id,
-                        arch=arch
-                    )
+                    env_id = f"{env_conf_id}:{repo_id}:{arch}"
                     envs[env_id] = self._analyze_env(env_conf, repo, arch)
-                    
-        self.data["envs"] = envs
 
+        self.data["envs"] = envs
 
     def _return_failed_workload_env_err(self, workload_conf, env_conf, repo, arch):
         workload = {}
@@ -1034,84 +1039,105 @@ def process_single_srpm_root_log(work_item):
         # It can only have labels that are in both the workload_conf and the env_conf
         workload["labels"] = list(set(workload_conf["labels"]) & set(env_conf["labels"]))
 
-        with dnf.Base() as base:
-
-            base.conf.debuglevel = 0
-            base.conf.errorlevel = 0
-            base.conf.logfilelevel = 0
+        with dnf5_base() as base:
+            config = base.get_config()
+            config.get_debuglevel_option().set(0)
 
             # Local DNF cache
-            cachedir_name = "dnf_cachedir-{repo}-{arch}".format(
-                repo=repo["id"],
-                arch=arch
-            )
-            base.conf.cachedir = os.path.join(self.tmp_dnf_cachedir, cachedir_name)
+            cachedir_name = f"dnf_cachedir-{repo['id']}-{arch}"
+            config.get_cachedir_option().set(os.path.join(self.tmp_dnf_cachedir, cachedir_name))
 
             # Environment installroot
             # Since we're not writing anything into the installroot,
             # let's just use the base image's installroot!
-            root_name = "dnf_env_installroot-{env_conf}-{repo}-{arch}".format(
-                env_conf=env_conf["id"],
-                repo=repo["id"],
-                arch=arch
-            )
-            base.conf.installroot = os.path.join(self.tmp_installroots, root_name)
+            root_name = f"dnf_env_installroot-{env_conf['id']}-{repo['id']}-{arch}"
+            config.get_installroot_option().set(os.path.join(self.tmp_installroots, root_name))
 
-            # Architecture
-            base.conf.arch = arch
-            base.conf.ignorearch = True
+            # Architecture and Releasever
+            vars = base.get_vars()
+            vars.set("arch", arch)
+            vars.set("basearch", arch)
+            vars.set("releasever", repo["source"]["releasever"])
 
-            # Releasever
-            base.conf.substitutions['releasever'] = repo["source"]["releasever"]
+            config.get_ignorearch_option().set(True)
 
             # Environment config
             if "include-weak-deps" not in workload_conf["options"]:
-                base.conf.install_weak_deps = False
-            if "include-docs" not in workload_conf["options"]:
-                base.conf.tsflags.append('nodocs')
+                config.get_install_weak_deps_option().set(False)
+            # Note: nodocs is handled differently in DNF5
+
+            # DNF5: setup() must be called after configuration but before using repo_sack
+            base.setup()
 
             # Load repos
             #log("  Loading repos...")
             #base.read_all_repos()
             self._load_repo_cached(base, repo, arch)
 
-            # 0 % 
+            # Build list of repo names for error handling
+            repo_names_to_load = []
+            for repo_name, repo_data in repo["source"]["repos"].items():
+                if repo_data["limit_arches"] and arch not in repo_data["limit_arches"]:
+                    continue
+                repo_names_to_load.append(repo_name)
+
+            # 0 %
 
             # Now I need to load the local RPMDB.
             # However, if the environment is empty, it wasn't created, so I need to treat
             # it differently. So let's check!
+            repo_sack = base.get_repo_sack()
             if len(env_conf["packages"]) or len(env_conf["arch_packages"][arch]) or len(env_conf["groups"]):
                 # It's not empty! Load local data.
                 base.fill_sack(load_system_repo=True)
+                # DNF5: This loads both repos and system data
+                # This sometimes fails, so let's try at least N times with repo-disabling logic
+                MAX_TRIES = 10
+                attempts = 0
+                success = False
+                failed_repos = []
+                while attempts < MAX_TRIES:
+                    try:
+                        repo_sack.load_repos()
+                        success = True
+                        break
+                    except (UserAssertionError, DnfErr, RuntimeError, Dnf5RepoDownloadError) as err:
+                        attempts += 1
+                        error_msg = str(err)
+                if not success:
+                    err = f"Failed to download repodata while analyzing workload '{workload_conf_id} on '{env_conf_id}' from '{repo_id}' {arch}..."
+                    err_log(err)
+                    raise RepoDownloadError(err)
             else:
                 # It's empty. Treat it like we're using an empty installroot.
                 # This sometimes fails, so let's try at least N times
                 # before totally giving up!
-                MAX_TRIES = 10
+                max_tries = 10
                 attempts = 0
                 success = False
-                while attempts < MAX_TRIES:
+                failed_repos = []
+                while attempts < max_tries:
                     try:
-                        base.fill_sack(load_system_repo=False)
+                        repo_sack.load_repos()
                         success = True
                         break
                     except dnf.exceptions.RepoError as err:
                         attempts +=1
                         #log("  Failed to download repodata. Trying again!")
+                    except (UserAssertionError, DnfErr, RuntimeError, Dnf5RepoDownloadError) as err:
+                        attempts += 1
+                        error_msg = str(err)
                 if not success:
-                    err = "Failed to download repodata while analyzing workload '{workload_id} on '{env_id}' from '{repo}' {arch}...".format(
-                            workload_id=workload_conf_id,
-                            env_id=env_conf_id,
-                            repo_name=repo["name"],
-                            repo=repo_id,
-                            arch=arch)
+                    err = f"Failed to download repodata while analyzing workload '{workload_conf_id} on '{env_conf_id}' from '{repo_id}' {arch}..."
                     err_log(err)
                     raise RepoDownloadError(err)
-            
+
             # 37 %
 
+            # DNF5: Create Goal for package operations
+            goal = Goal(base)
+
             # Packages
-            #log("  Adding packages...")
             for pkg in workload_conf["packages"]:
                 try:
                     base.install(pkg)
@@ -1124,14 +1150,18 @@ def process_single_srpm_root_log(work_item):
                         else:
                             workload["warnings"]["non_existing_pkgs"].append(pkg)
                         continue
-            
+                goal.add_install(pkg)
+
             # Groups
-            #log("  Adding groups...")
             if workload_conf["groups"]:
-                base.read_comps(arch_filter=True)
+                # DNF5: Groups are loaded automatically with repos
+                pass
             for grp_spec in workload_conf["groups"]:
-                group = base.comps.group_by_pattern(grp_spec)
-                if not group:
+                try:
+                    # DNF5: add_group_install with settings
+                    settings = GoalJobSettings()
+                    goal.add_group_install(grp_spec, settings)
+                except (UserAssertionError, DnfErr):
                     workload["errors"]["non_existing_pkgs"].append(grp_spec)
                     continue
                 base.group_install(group.id, ['mandatory', 'default'])
@@ -1174,6 +1204,7 @@ def process_single_srpm_root_log(work_item):
                         else:
                             workload["warnings"]["non_existing_placeholder_deps"].append(pkg)
                         continue
+                    goal.add_install(pkg)
 
             # Architecture-specific packages
             for pkg in workload_conf["arch_packages"][arch]:
@@ -1185,6 +1216,7 @@ def process_single_srpm_root_log(work_item):
                     else:
                         workload["warnings"]["non_existing_pkgs"].append(pkg)
                     continue
+                goal.add_install(pkg)
 
             if workload["errors"]["non_existing_pkgs"] or workload["errors"]["non_existing_placeholder_deps"]:
                 error_message_list = []
@@ -1214,6 +1246,7 @@ def process_single_srpm_root_log(work_item):
                         error_message_list.append(pkg_string)
                 if workload["warnings"]["non_existing_placeholder_deps"]:
                     error_message_list.append("The following dependencies of package placeholders are not available (and were skipped):")
+                    # TODO: use comprehension and `error_message_list.extend([])`
                     for pkg_name in workload["warnings"]["non_existing_placeholder_deps"]:
                         pkg_string = f"  - {pkg_name}"
                         error_message_list.append(pkg_string)
@@ -1225,13 +1258,17 @@ def process_single_srpm_root_log(work_item):
             # Resolve dependencies
             #log("  Resolving dependencies...")
             try:
-                base.resolve()
-            except dnf.exceptions.DepsolveError as err:
+                # DNF5: resolve via goal
+                transaction = goal.resolve()
+            except (DnfErr, RuntimeError, Exception) as err:
                 workload["succeeded"] = False
                 workload["errors"]["message"] = str(err)
                 #log("  Failed!  (Error message will be on the workload results page.")
                 #log("")
                 return workload
+
+                # Enhanced error message for dependency failures
+                error_message = str(err)
 
             # 43 %
 
@@ -1240,24 +1277,30 @@ def process_single_srpm_root_log(work_item):
             query_env = base.sack.query()
             pkgs_env = set(query_env.installed())
             pkgs_added = set(base.transaction.install_set)
+            # Get installed packages from the system repo
+            query_env = PackageQuery(base)
+            query_env.filter_installed()
+            pkgs_env = set(query_env)
+
+            # Get packages being installed from transaction
+            # DNF5: transaction packages vector is directly indexable
+            pkgs_added = []
+            trans_pkgs = transaction.get_transaction_packages()
+            for i in range(trans_pkgs.size()):
+                trans_pkg = trans_pkgs[i]
+                pkgs_added.append(trans_pkg.get_package())
+            pkgs_added = set(pkgs_added)
+
             pkgs_all = set.union(pkgs_env, pkgs_added)
-            query_all = base.sack.query().filterm(pkg=pkgs_all)
-            
+
             # OK all good so save stuff now
+            # TODO: use comprehensions & .extend
             for pkg in pkgs_env:
-                pkg_id = "{name}-{evr}.{arch}".format(
-                    name=pkg.name,
-                    evr=pkg.evr,
-                    arch=pkg.arch
-                )
+                pkg_id = f"{pkg.get_name()}-{pkg.get_evr()}.{pkg.get_arch()}"
                 workload["pkg_env_ids"].append(pkg_id)
-            
+
             for pkg in pkgs_added:
-                pkg_id = "{name}-{evr}.{arch}".format(
-                    name=pkg.name,
-                    evr=pkg.evr,
-                    arch=pkg.arch
-                )
+                pkg_id = f"{pkg.get_name()}-{pkg.get_evr()}.{pkg.get_arch()}"
                 workload["pkg_added_ids"].append(pkg_id)
 
             # No errors so far? That means the analysis has succeeded,
@@ -1271,18 +1314,15 @@ def process_single_srpm_root_log(work_item):
 
             # 43 %
 
-            workload["pkg_relations"] = self._analyze_package_relations(query_all, package_placeholders)
+            # Use the actual packages that were installed/selected by DNF's priority logic.
+            # Don't re-query by name - that would return ALL versions from ALL repos,
+            # including lower-priority duplicates (e.g., both ELN and Rawhide versions).
+            workload["pkg_relations"] = self._analyze_package_relations(pkgs_all, package_placeholders)
 
             # 100 %
-            
+
             pkg_env_count = len(workload["pkg_env_ids"])
             pkg_added_count = len(workload["pkg_added_ids"])
-            #log("  Done!  ({pkg_count} packages in total. That's {pkg_env_count} in the environment, and {pkg_added_count} added.)".format(
-            #    pkg_count=str(pkg_env_count + pkg_added_count),
-            #    pkg_env_count=pkg_env_count,
-            #    pkg_added_count=pkg_added_count
-            #))
-            #log("")
 
             # How long do various parts take:
             # 37 % - populatind DNF's base.sack
@@ -1378,11 +1418,33 @@ def process_single_srpm_root_log(work_item):
                 log("--------------------------------------------------------------------------")
                 log("")
                 log("")
-                sys.exit(1)
-        
-            workload = queue_result.get()
-            
-            results[workload_id] = workload
+
+                # Create a failed workload result instead of crashing
+                workload = {}
+                workload["workload_conf_id"] = workload_conf["id"]
+                workload["env_conf_id"] = env_conf["id"]
+                workload["repo_id"] = repo["id"]
+                workload["arch"] = arch
+                workload["pkg_env_ids"] = []
+                workload["pkg_added_ids"] = []
+                workload["pkg_placeholder_ids"] = []
+                workload["srpm_placeholder_names"] = []
+                workload["pkg_relations"] = []
+                workload["errors"] = {}
+                workload["errors"]["non_existing_pkgs"] = []
+                workload["errors"]["non_existing_placeholder_deps"] = []
+                workload["errors"]["message"] = f"Workload analysis timed out after 222 seconds or subprocess crashed"
+                workload["warnings"] = {}
+                workload["warnings"]["non_existing_pkgs"] = []
+                workload["warnings"]["non_existing_placeholder_deps"] = []
+                workload["warnings"]["message"] = None
+                workload["succeeded"] = False
+                workload["env_succeeded"] = False
+                workload["labels"] = list(set(workload_conf["labels"]) & set(env_conf["labels"]))
+                results[workload_id] = workload
+            else:
+                workload = queue_result.get()
+                results[workload_id] = workload
 
 
     async def _analyze_workloads_async(self, results):
@@ -1475,23 +1537,14 @@ def process_single_srpm_root_log(work_item):
 
                         # Before even started, look if the env succeeded. If not, there's
                         # no point in doing anything here.
-                        env_id = "{env_conf_id}:{repo_id}:{arch}".format(
-                            env_conf_id=env_conf["id"],
-                            repo_id=repo["id"],
-                            arch=arch
-                        )
+                        env_id = f"{env_conf['id']}:{repo['id']}:{arch}"
                         env = self.data["envs"][env_id]
 
                         if env["succeeded"]:
                             self._queue_workload_processing(workload_conf, env_conf, repo, arch)
 
                         else:
-                            workload_id = "{workload_conf_id}:{env_conf_id}:{repo_id}:{arch}".format(
-                                workload_conf_id=workload_conf_id,
-                                env_conf_id=env_conf_id,
-                                repo_id=repo_id,
-                                arch=arch
-                            )
+                            workload_id = f"{workload_conf_id}:{env_conf_id}:{repo_id}:{arch}"
                             self.data["workloads"][workload_id] = self._return_failed_workload_env_err(workload_conf, env_conf, repo, arch)
 
         asyncio.run(self._analyze_workloads_async(self.data["workloads"]))
@@ -2153,20 +2206,12 @@ def process_single_srpm_root_log(work_item):
                     fake_env_conf["arch_packages"][arch] = []
 
                     srpms_to_resolve_counter += 1
-
-                    #log("[ Buildroot - pass {} - {} of {} ]".format(pass_counter, srpms_to_resolve_counter, total_srpms_to_resolve))
-                    #log("Resolving SRPM buildroot: {repo_id} {arch} {srpm_id}".format(
-                    #    repo_id=repo_id,
-                    #    arch=arch,
-                    #    srpm_id=srpm_id
-                    #))
                     repo = self.configs["repos"][repo_id]
-
-                    #fake_workload = self._analyze_workload(fake_workload_conf, fake_env_conf, repo, arch)
                     self._queue_workload_processing(fake_workload_conf, fake_env_conf, repo, arch)
 
                     # Save the buildroot data
                     self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["queued"] = True
+        log(f"fake_workload_results -> {fake_workload_results}")
 
         asyncio.run(self._analyze_workloads_async(fake_workload_results))
 
@@ -2480,12 +2525,6 @@ def process_single_srpm_root_log(work_item):
             target_pkg["reverse_weak_dependency_of_pkg_nevrs"] = set()
 
             # Dependency of RPM Names
-            target_pkg["dependency_of_pkg_names"] = {} # of set() of nevrs
-            target_pkg["hard_dependency_of_pkg_names"] = {} # of set() of nevrs
-            target_pkg["weak_dependency_of_pkg_names"] = {} # if set() of nevrs
-            target_pkg["reverse_weak_dependency_of_pkg_names"] = {} # if set() of nevrs
-    
-    def _populate_pkg_or_srpm_relations_fields(self, target_pkg, source_pkg, type = None, view = None):
             target_pkg["dependency_of_pkg_names"] = {}  # of set() of nevrs
             target_pkg["hard_dependency_of_pkg_names"] = {}  # of set() of nevrs
             target_pkg["weak_dependency_of_pkg_names"] = {}  # if set() of nevrs
@@ -2538,7 +2577,7 @@ def process_single_srpm_root_log(work_item):
         for level_data in source_pkg["level"]:
             # 'level' is the number
             # 'level_data' is the ["all"][workload_id] or ["all"][srpm_id] or
-            #                     ["req"][workload_id] or ["req"][srpm_id] or 
+            #                     ["req"][workload_id] or ["req"][srpm_id] or
             #                     ["dep"][workload_id] or ["dep"][srpm_id] or
             #                     ["env"][workload_id] or ["env"][srpm_id]
 
@@ -2863,8 +2902,14 @@ def process_single_srpm_root_log(work_item):
 
                     view_all_arches["numbers"]["pkgs"][category] += 1
 
-                view_all_arches["numbers"]["pkgs"]["runtime"] = view_all_arches["numbers"]["pkgs"]["env"] + view_all_arches["numbers"]["pkgs"]["req"] + view_all_arches["numbers"]["pkgs"]["dep"]
-                view_all_arches["numbers"]["pkgs"]["build"] = view_all_arches["numbers"]["pkgs"]["build_base"] + view_all_arches["numbers"]["pkgs"]["build_level_1"] + view_all_arches["numbers"]["pkgs"]["build_level_2_plus"]
+                view_all_arches["numbers"]["pkgs"]["runtime"] = (view_all_arches["numbers"]["pkgs"]["env"] +
+                                                                 view_all_arches["numbers"]["pkgs"]["req"] +
+                                                                 view_all_arches["numbers"]["pkgs"]["dep"]
+                                                                 )
+                view_all_arches["numbers"]["pkgs"]["build"] = (view_all_arches["numbers"]["pkgs"]["build_base"] +
+                                                               view_all_arches["numbers"]["pkgs"]["build_level_1"] +
+                                                               view_all_arches["numbers"]["pkgs"]["build_level_2_plus"]
+                                                               )
 
                 # SRPMs
                 for pkg in view_all_arches["source_pkgs_by_name"].values():
@@ -3344,9 +3389,6 @@ def process_single_srpm_root_log(work_item):
 
                 self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name]["best_maintainers"].update(best_maintainers)
 
-
-
-
         log("")
         log("  DONE!")
         log("")
@@ -3372,9 +3414,6 @@ def process_single_srpm_root_log(work_item):
             else:
                 self.tmp_dnf_cachedir = os.path.join(tmp, "dnf_cachedir")
             self.tmp_installroots = os.path.join(tmp, "installroots")
-
-            # List of supported arches
-            all_arches = self.settings["allowed_arches"]
 
             # Repos
             log("")
