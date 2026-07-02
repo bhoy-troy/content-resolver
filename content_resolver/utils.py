@@ -2,6 +2,9 @@ import datetime
 import json
 import re
 import sys
+from contextlib import contextmanager
+from typing import Iterator
+
 import jinja2
 
 class SetEncoder(json.JSONEncoder):
@@ -13,11 +16,11 @@ class SetEncoder(json.JSONEncoder):
         return json.JSONEncoder.default(self, obj)
 
 
-
 def load_data(path):
-    with open(path, 'r') as file:
+    with open(path, "r") as file:
         data = json.load(file)
     return data
+
 
 def log(msg):
     print(msg, file=sys.stderr)
@@ -26,18 +29,19 @@ def log(msg):
 def err_log(msg):
     print(f"ERROR LOG:  {msg}", file=sys.stderr)
 
+
 def pkg_id_to_name(pkg_id):
-    pkg_name = pkg_id.rsplit("-",2)[0]
+    pkg_name = pkg_id.rsplit("-", 2)[0]
     return pkg_name
 
 
 def dump_data(path, data):
-    with open(path, 'w') as file:
+    with open(path, "w") as file:
         json.dump(data, file, cls=SetEncoder)
 
 
-def size(num, suffix='B'):
-    for unit in ['','k','M','G']:
+def size(num, suffix="B"):
+    for unit in ["", "k", "M", "G"]:
         if abs(num) < 1024.0:
             return "%3.1f %s%s" % (num, unit, suffix)
         num /= 1024.0
@@ -49,7 +53,7 @@ def workload_id_to_conf_id(workload_id):
     return workload_conf_id
 
 def url_to_id(url):
-
+    # FIXME: Use urllib.parse.urlparse for more accurate and faster parsing
     # strip the protocol
     if url.startswith("https://"):
         url = url[8:]

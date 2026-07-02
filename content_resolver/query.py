@@ -472,10 +472,7 @@ class Query():
     def workload_size(self, workload_conf_id, env_conf_id, repo_id, arch):
         # A total size of a workload (or multiple combined!)
         pkgs = self.workload_pkgs(workload_conf_id, env_conf_id, repo_id, arch)
-        size = 0
-        for pkg in pkgs:
-            size += pkg["installsize"]
-        return size
+        return sum(pkg["installsize"] for pkg in pkgs)
 
     @lru_cache(maxsize = None)
     def env_size(self, env_conf_id, repo_id, arch):
@@ -740,6 +737,7 @@ class Query():
             base_view_id = view_conf["base_view_id"]
 
             # I always need to get all package IDs
+            # FIXME: Use a dict-comprehension and filter by ` pkg_id not in base_pkg_ids`
             base_pkg_ids = self.pkgs_in_view(base_view_id, arch, output_change="ids")
             for base_pkg_id in base_pkg_ids:
                 if base_pkg_id in pkgs:
@@ -750,6 +748,7 @@ class Query():
         # Filter out packages not belonging to the maintainer
         # It's filtered out at this stage to keep the context of fields like
         # "q_required_in" etc. to be the whole view
+        # FIXME: Use a dict-comprehension for required pkgs use `if maintainer in pkg["q_maintainers"]` for filter
         pkg_ids_to_delete = set()
         if maintainer:
             for pkg_id, pkg in pkgs.items():
@@ -1072,9 +1071,8 @@ class Query():
             for pkg_placeholder_name, pkg_placeholder in workload_conf["package_placeholders"]["srpms"].items():
                 # Placeholders can be limited to specific architectures.
                 # If that's the case, check if it's available on this arch, otherwise skip it.
-                if pkg_placeholder["limit_arches"]:
-                    if arch not in pkg_placeholder["limit_arches"]:
-                        continue
+                if pkg_placeholder["limit_arches"] and arch not in pkg_placeholder["limit_arches"]:
+                    continue
 
                 srpm_name = pkg_placeholder["name"]
 
@@ -1115,6 +1113,7 @@ class Query():
             workload_conf = self.configs["workloads"][workload_conf_id]
             maintainer = workload_conf["maintainer"]
 
+            # TODO: use dict.setdefault() instead of if statement
             if maintainer not in maintainers:
                 maintainers[maintainer] = {}
                 maintainers[maintainer]["name"] = maintainer
