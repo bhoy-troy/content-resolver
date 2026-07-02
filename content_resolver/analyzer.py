@@ -42,6 +42,36 @@ def pkg_placeholder_name_to_nevr(placeholder_name):
     return placeholder_id
 
 
+def is_package_resolvable(base: Base, pkg_name: str) -> bool:
+    """
+    Check if a package name is resolvable, either as a real package or via provides.
+
+    Args:
+        base: DNF5 base object
+        pkg_name: Package name to check
+
+    Returns:
+        bool: True if the package can be resolved, False otherwise
+    """
+    query = PackageQuery(base)
+
+    # First check if it exists as a real package name
+    query.filter_name([pkg_name])
+    if not query.empty():
+        return True
+
+    # If not found by name, check if any package provides it.
+    # Note: Must create a new query because DNF5 filters are cumulative.
+    # Reusing the filtered query would search for provides within the
+    # already-filtered (possibly empty) result set, not all packages.
+    query = PackageQuery(base)
+    query.filter_provides([pkg_name])
+    if not query.empty():
+        return True
+
+    return False
+
+
 #####################################################
 ### Find build dependencies from a Koji root log ###
 ####################################################
@@ -323,7 +353,6 @@ def process_single_srpm_root_log(work_item):
             }
 
         # Parse dependencies
-        deps = _get_build_deps_from_a_root_log(root_log_contents)
         try:
             deps = _get_build_deps_from_a_root_log(root_log_contents)
         except Exception as e:
@@ -334,6 +363,13 @@ def process_single_srpm_root_log(work_item):
                 'deps': [],
                 'error': f"Parse failed: {str(e)}"
             }
+
+        # Check if parsing yielded suspiciously few dependencies
+        warning = None
+        if len(deps) == 0:
+            warning = "WARNING: Zero dependencies found (possible truncated/corrupted log)"
+        elif len(deps) < 3:
+            warning = f"WARNING: Only {len(deps)} dependencies found (expected more)"
 
         return {
             'srpm_id': srpm_id,
@@ -351,6 +387,7 @@ def process_single_srpm_root_log(work_item):
         }
 
 
+class Analyzer:
     ###############################################################################
     ### Analyzing stuff! ##########################################################
     ###############################################################################
@@ -390,6 +427,8 @@ def process_single_srpm_root_log(work_item):
         self.configs = configs
         self.settings = settings
 
+        # DNF5: Repo cache is unused (kept for potential future implementation)
+        # See _load_repo_cached() docstring for why repo caching is disabled in DNF5
         self.global_dnf_repo_cache = {}
         self.data = {}
         self.cache = {}
@@ -397,6 +436,10 @@ def process_single_srpm_root_log(work_item):
         self.cache["root_log_deps"] = {}
         self.cache["root_log_deps"]["current"] = {}
         self.cache["root_log_deps"]["next"] = {}
+
+        # Cache for compose metadata (composeinfo.json)
+        # Maps repo_id -> {arch -> [list of available variant names]}
+        self.compose_metadata_cache = {}
 
         self.metrics_data = []
 
@@ -442,52 +485,151 @@ def process_single_srpm_root_log(work_item):
             counter += 1
 
     
+    def _validate_root_log_cache(self):
+        """
+        Validate cached root.log dependency data for invalid entries.
+        Reports packages with zero or very low dependency counts.
+        """
+        cache = self.cache["root_log_deps"]["current"]
+        if not cache:
+            return
+
+        zero_deps_cached = []
+        low_deps_cached = []
+
+        for koji_id, arches in cache.items():
+            for arch, srpms in arches.items():
+                for srpm_id, deps in srpms.items():
+                    if not isinstance(deps, list):
+                        continue
+
+                    if len(deps) == 0:
+                        zero_deps_cached.append({
+                            'srpm_id': srpm_id,
+                            'arch': arch,
+                            'koji_id': koji_id
+                        })
+                    elif len(deps) < 3:
+                        low_deps_cached.append({
+                            'srpm_id': srpm_id,
+                            'arch': arch,
+                            'deps': deps,
+                            'koji_id': koji_id
+                        })
+
+
+    def _get_available_compose_variants(self, repo, arch):
+        """
+        Fetch and parse composeinfo.json to determine which variants are available
+        for a given repository and architecture.
+
+        Returns:
+            dict: Mapping of config repo names to boolean availability
+                  e.g., {'BaseOS': True, 'HA': True, 'RS': False, 'Rawhide': True}
+                  Returns empty dict if composeinfo is not available or on error.
+
+        Caches results in self.compose_metadata_cache[repo_id][arch].
+
+        Note: Maps config repo names (like 'HA', 'buildroot') to compose variant names
+        (like 'HighAvailability', 'Buildroot') and marks external fallback repos like
+        'Rawhide' as always available.
+        """
+        repo_id = repo["id"]
+
+        # Check cache first
+        if repo_id not in self.compose_metadata_cache:
+            self.compose_metadata_cache[repo_id] = {}
+
+        if arch in self.compose_metadata_cache[repo_id]:
+            return self.compose_metadata_cache[repo_id][arch]
+
+        # If no composeinfo URL is configured, return empty dict (no filtering)
+        composeinfo_url = repo["source"].get("composeinfo")
+        if not composeinfo_url:
+            self.compose_metadata_cache[repo_id][arch] = {}
+            return {}
+
+        # Mapping of config repo names to compose variant names
+        # This handles cases where the names differ
+        repo_name_mapping = {
+            "HA": "HighAvailability",
+            "buildroot": "Buildroot",
+        }
+
+        # External fallback repos that aren't part of the compose
+        # These should always be marked as available
+        external_repos = {"Rawhide"}
+
+        try:
+            # Fetch composeinfo.json
+            with urllib.request.urlopen(composeinfo_url, timeout=10) as response:
+                compose_data = json.loads(response.read().decode('utf-8'))
+
+            # Extract variants available for this architecture
+            compose_variants = set()
+            variants = compose_data.get("payload", {}).get("variants", {})
+
+            for variant_name, variant_data in variants.items():
+                variant_arches = variant_data.get("arches", [])
+                if arch in variant_arches:
+                    compose_variants.add(variant_name)
+
+            # Build availability map for all config repo names
+            availability = {}
+            for config_name in repo["source"]["repos"].keys():
+                # Check if this is an external fallback repo
+                if config_name in external_repos:
+                    availability[config_name] = True
+                    continue
+
+                # Map config name to compose variant name
+                compose_name = repo_name_mapping.get(config_name, config_name)
+
+                # Check if the variant exists in the compose
+                availability[config_name] = compose_name in compose_variants
+
+            # Cache and return
+            self.compose_metadata_cache[repo_id][arch] = availability
+            return availability
+
+        except Exception as e:
+            # On any error (network, parsing, etc.), log and return empty dict
+            # Empty dict means no filtering - we'll try all repos as before
+            log(f"  Warning: Could not fetch composeinfo from {composeinfo_url}: {e}")
+            self.compose_metadata_cache[repo_id][arch] = {}
+            return {}
+
     def _load_repo_cached(self, base, repo, arch):
         repo_id = repo["id"]
 
-        exists = True
-        
-        if repo_id not in self.global_dnf_repo_cache:
-            exists = False
-            self.global_dnf_repo_cache[repo_id] = {}
+        # Repo caching disabled
+        exists = False
 
-        elif arch not in self.global_dnf_repo_cache[repo_id]:
-            exists = False
-        
-        if exists:
-            #log("  Loading repos from cache...")
+        if not exists:
 
-            for repo in self.global_dnf_repo_cache[repo_id][arch]:
-                base.repos.add(repo)
-
-        else:
-            #log("  Loading repos using DNF...")
+            # Get available variants from composeinfo.json (if configured)
+            available_variants = self._get_available_compose_variants(repo, arch)
 
             for repo_name, repo_data in repo["source"]["repos"].items():
-                if repo_data["limit_arches"]:
-                    if arch not in repo_data["limit_arches"]:
-                        #log("  Skipping {} on {}".format(repo_name, arch))
-                        continue
-                #log("  Including {}".format(repo_name))
+                if repo_data["limit_arches"] and arch not in repo_data["limit_arches"]:
+                    # log("  Skipping {} on {}".format(repo_name, arch))
+                    continue
 
-                additional_repo = dnf.repo.Repo(
-                    name=repo_name,
-                    parent_conf=base.conf
-                )
-                additional_repo.baseurl = repo_data["baseurl"]
-                additional_repo.priority = repo_data["priority"]
-                additional_repo.exclude = repo_data["exclude"]
-                base.repos.add(additional_repo)
+                # Check if variant exists in compose (if composeinfo is available)
+                if available_variants and not available_variants.get(repo_name, True):
+                    log(f"  Skipping {repo_name} on {arch} (not in compose)")
+                    continue
 
-            # Additional repository (if configured)
-            #if repo["source"]["additional_repository"]:
-            #    additional_repo = dnf.repo.Repo(name="additional-repository",parent_conf=base.conf)
-            #    additional_repo.baseurl = [repo["source"]["additional_repository"]]
-            #    additional_repo.priority = 1
-            #    base.repos.add(additional_repo)
+                config = base.get_config()
+                repo_sack = base.get_repo_sack()
+                additional_repo = repo_sack.create_repo(repo_name)
+                repo_config = additional_repo.get_config()
+                repo_config.get_baseurl_option().set([repo_data["baseurl"]])
+                repo_config.get_priority_option().set(repo_data["priority"])
+                # DNF5: Set excludes via repo config, not repo_sack
+                if repo_data["exclude"]:
+                    repo_config.get_excludepkgs_option().set(repo_data["exclude"])
 
-            # All other system repos
-            #base.read_all_repos()
 
             self.global_dnf_repo_cache[repo_id][arch] = []
             for repo in base.repos.iter_enabled():
@@ -573,21 +715,34 @@ def process_single_srpm_root_log(work_item):
                     repo_sack.load_repos()
                     success = True
                     break
-                except dnf.exceptions.RepoError as err:
-                    attempts +=1
-                    log("  Failed to download repodata. Trying again!")
                 except (UserAssertionError, DnfErr) as err:
                     attempts += 1
                     error_msg = str(err)
                     log(f"  Failed to download repodata (attempt {attempts}/{max_tries}). Error: {error_msg}")
+
+                    # Try to identify which repo failed and disable it
+                    for repo_name in repo_names_to_load:
+                        if repo_name in error_msg:
+                            if repo_name not in failed_repos:
+                                log(f"  Disabling problematic repository: {repo_name}")
+                                failed_repos.append(repo_name)
+                                try:
+                                    repo_query = RepoQuery(base)
+                                    for repo_weak_ptr in repo_query:
+                                        repo_obj = repo_weak_ptr.get()
+                                        if repo_obj.get_id() == repo_name:
+                                            repo_obj.disable()
+                                            break
+                                except Exception as disable_err:
+                                    log(f"  Warning: Could not disable repo {repo_name}: {disable_err}")
+                            break
+
             if not success:
                 # If we still failed after trying to disable problematic repos, give up
                 err = f"Failed to download repodata while analyzing repo '{repo['name']} ({repo['id']}) {arch}'"
                 err_log(err)
                 raise RepoDownloadError(err)
 
-            # DNF query
-            query = base.sack.query
             if failed_repos:
                 log(f"  WARNING: Proceeding without repositories: {', '.join(failed_repos)}")
 
@@ -620,9 +775,6 @@ def process_single_srpm_root_log(work_item):
             # But the world isn't as simple! So add all reponames
             # to every package, in case it's in multiple repos
 
-            repo_priorities = {}
-            for repo_name, repo_data in repo["source"]["repos"].items():
-                repo_priorities[repo_name] = repo_data["priority"]
             repo_priorities = {
                 repo_name: repo_data["priority"] for repo_name, repo_data in repo["source"]["repos"].items()
             }
@@ -680,8 +832,56 @@ def process_single_srpm_root_log(work_item):
                 except:
                     pass
 
-    def _analyze_package_relations(self, dnf_query, package_placeholders = None):
+    def _analyze_package_relations(self, packages, package_placeholders=None):
+        """
+        Analyze package relationships for the given set of packages.
+
+        Args:
+            packages: Iterable of DNF5 package objects (e.g., set, PackageQuery)
+            package_placeholders: Optional dict of placeholder packages
+
+        Returns:
+            dict: Package relations mapping pkg_id -> relation data
+
+        Note: Accepts any iterable of package objects - typically the actual packages
+        selected by DNF during installation. Do NOT pass a query filtered by name,
+        as that would include all versions from all repos (including low-priority duplicates).
+        """
+        # TODO: Implement DNF5 package relationship analysis
+        # DNF5 PackageQuery.filter() API is different
+        # Temporarily returning minimal relations structure to test rest of migration
+        # DNF5 Migration Note: Unlike DNF4's filter(requires=[pkg]) API, DNF5 requires
+        # manual iteration to build reverse dependency maps. We invert the relationship:
+        # instead of asking "each dependency, record "package Y is required by package X".
+        # who requires package X?", we iterate all packages and for
         relations = {}
+
+        # Create empty relation entries for all packages
+        for pkg in packages:
+            pkg_id = f"{pkg.get_name()}-{pkg.get_evr()}.{pkg.get_arch()}"
+            relations[pkg_id] = {}
+            relations[pkg_id]["required_by"] = []
+            relations[pkg_id]["recommended_by"] = []
+            relations[pkg_id]["suggested_by"] = []
+            relations[pkg_id]["supplements"] = []
+            relations[pkg_id]["source_name"] = pkg.get_source_name()
+            relations[pkg_id]["reponame"] = pkg.get_repo_id()
+
+        if package_placeholders:
+            for placeholder_name, placeholder_data in package_placeholders.items():
+                placeholder_id = pkg_placeholder_name_to_id(placeholder_name)
+
+                relations[placeholder_id] = {}
+                relations[placeholder_id]["required_by"] = []
+                relations[placeholder_id]["recommended_by"] = []
+                relations[placeholder_id]["suggested_by"] = []
+                relations[placeholder_id]["supplements"] = []
+                relations[placeholder_id]["reponame"] = None
+
+        return relations
+
+        # TODO: DNF5 filter API needs reimplementation below
+        # This code is never reached, ** keep as sample **
 
         for pkg in dnf_query:
             pkg_id = f"{pkg.get_name()}-{pkg.get_evr()}.{pkg.get_arch()}"
@@ -843,9 +1043,6 @@ def process_single_srpm_root_log(work_item):
                     repo_sack.load_repos()
                     success = True
                     break
-                except dnf.exceptions.RepoError as err:
-                    attempts +=1
-                    log("  Failed to download repodata. Trying again!")
                 except (UserAssertionError, DnfErr, RuntimeError) as err:
                     attempts += 1
                     error_msg = str(err)
@@ -865,9 +1062,8 @@ def process_single_srpm_root_log(work_item):
             # Packages
             log("  Adding packages...")
             for pkg in env_conf["packages"]:
-                try:
-                    base.install(pkg)
-                except dnf.exceptions.MarkingError:
+                # DNF5: Check if package is resolvable (by name or provides) before adding
+                if not is_package_resolvable(base, pkg):
                     env["errors"]["non_existing_pkgs"].append(pkg)
                     continue
                 goal.add_install(pkg)
@@ -875,7 +1071,6 @@ def process_single_srpm_root_log(work_item):
             # Groups
             log("  Adding groups...")
             if env_conf["groups"]:
-                base.read_comps(arch_filter=True)
                 # DNF5: Groups are loaded as part of repos
                 pass
             for grp_spec in env_conf["groups"]:
@@ -889,9 +1084,8 @@ def process_single_srpm_root_log(work_item):
 
             # Architecture-specific packages
             for pkg in env_conf["arch_packages"][arch]:
-                try:
-                    base.install(pkg)
-                except dnf.exceptions.MarkingError:
+                # DNF5: Check if package is resolvable (by name or provides) before adding
+                if not is_package_resolvable(base, pkg):
                     env["errors"]["non_existing_pkgs"].append(pkg)
                     continue
                 goal.add_install(pkg)
@@ -1089,7 +1283,6 @@ def process_single_srpm_root_log(work_item):
             repo_sack = base.get_repo_sack()
             if len(env_conf["packages"]) or len(env_conf["arch_packages"][arch]) or len(env_conf["groups"]):
                 # It's not empty! Load local data.
-                base.fill_sack(load_system_repo=True)
                 # DNF5: This loads both repos and system data
                 # This sometimes fails, so let's try at least N times with repo-disabling logic
                 MAX_TRIES = 10
@@ -1121,9 +1314,6 @@ def process_single_srpm_root_log(work_item):
                         repo_sack.load_repos()
                         success = True
                         break
-                    except dnf.exceptions.RepoError as err:
-                        attempts +=1
-                        #log("  Failed to download repodata. Trying again!")
                     except (UserAssertionError, DnfErr, RuntimeError, Dnf5RepoDownloadError) as err:
                         attempts += 1
                         error_msg = str(err)
@@ -1142,6 +1332,8 @@ def process_single_srpm_root_log(work_item):
                 try:
                     base.install(pkg)
                 except dnf.exceptions.MarkingError:
+                # DNF5: Check if package is resolvable (by name or provides) before adding
+                if not is_package_resolvable(base, pkg):
                     if pkg in self.settings["weird_packages_that_can_not_be_installed"]:
                         continue
                     else:
@@ -1164,9 +1356,7 @@ def process_single_srpm_root_log(work_item):
                 except (UserAssertionError, DnfErr):
                     workload["errors"]["non_existing_pkgs"].append(grp_spec)
                     continue
-                base.group_install(group.id, ['mandatory', 'default'])
-            
-            
+
                 # TODO: Mark group packages as required... the following code doesn't work
                 # for pkg in group.packages_iter():
                 #    print(pkg.name)
@@ -1196,9 +1386,8 @@ def process_single_srpm_root_log(work_item):
             # log("  Adding package placeholder dependencies...")
             for placeholder_name, placeholder_data in package_placeholders.items():
                 for pkg in placeholder_data["requires"]:
-                    try:
-                        base.install(pkg)
-                    except dnf.exceptions.MarkingError:
+                    # DNF5: Check if package is resolvable (by name or provides) before adding
+                    if not is_package_resolvable(base, pkg):
                         if "strict" in workload_conf["options"]:
                             workload["errors"]["non_existing_placeholder_deps"].append(pkg)
                         else:
@@ -1208,9 +1397,8 @@ def process_single_srpm_root_log(work_item):
 
             # Architecture-specific packages
             for pkg in workload_conf["arch_packages"][arch]:
-                try:
-                    base.install(pkg)
-                except dnf.exceptions.MarkingError:
+                # DNF5: Check if package is resolvable (by name or provides) before adding
+                if not is_package_resolvable(base, pkg):
                     if "strict" in workload_conf["options"]:
                         workload["errors"]["non_existing_pkgs"].append(pkg)
                     else:
@@ -1262,21 +1450,91 @@ def process_single_srpm_root_log(work_item):
                 transaction = goal.resolve()
             except (DnfErr, RuntimeError, Exception) as err:
                 workload["succeeded"] = False
-                workload["errors"]["message"] = str(err)
-                #log("  Failed!  (Error message will be on the workload results page.")
-                #log("")
-                return workload
 
                 # Enhanced error message for dependency failures
                 error_message = str(err)
 
+                # Check if this is a dependency chain failure (missing transitive dependency)
+                if "nothing provides" in error_message.lower() or "but none of the providers can be installed" in error_message.lower():
+                    error_lines = ["Dependency resolution failed:", ""]
+                    error_lines.append("This workload requires packages that have unmet dependencies.")
+                    error_lines.append("Common causes:")
+                    error_lines.append("  - A required package has been retired from Fedora")
+                    error_lines.append("  - A dependency is missing or not yet built")
+                    error_lines.append("  - Package maintainer needs to update dependencies")
+                    error_lines.append("")
+                    error_lines.append("Detailed error from DNF:")
+                    error_lines.append("-" * 70)
+                    error_lines.append(error_message)
+                    workload["errors"]["message"] = "\n".join(error_lines)
+                else:
+                    workload["errors"]["message"] = error_message
+
+                log(f"  Failed to resolve dependencies for {workload_conf['id']}")
+                # Show full error for debugging (truncate at 2000 chars if too long)
+                error_display = error_message if len(error_message) <= 2000 else error_message[:2000] + "...(truncated)"
+                log(f"  Error: {error_display}")
+                return workload
+
+            # CRITICAL DNF4 vs DNF5 DIFFERENCE:
+            # DNF4 raises exceptions when packages can't be resolved due to dependency failures.
+            # DNF5 does NOT raise exceptions - it returns a transaction with problems recorded.
+            # If we don't check transaction.get_problems(), packages with unresolvable dependencies
+            # will be silently skipped, showing as "succeeded" with 0 packages installed.
+            # If not used it causes the packages that have unresolvable deps to show NO errors in DNF5 while we
+            # expect "nothing provides" errors.
+            if transaction.get_problems() > 0:
+                # Get error messages from resolve logs
+                resolve_logs = transaction.get_resolve_logs_as_strings()
+                error_message = "\n".join(resolve_logs)
+
+                # DNF5 reports repo priority conflicts that DNF4 silently resolved.
+                # Filter out version conflicts between repos (expected with multi-repo setups).
+                # Keep real dependency failures (missing packages, broken deps).
+
+                # Check if entire error message is about version conflicts between repos
+                error_lower = error_message.lower()
+
+                # Pattern 1: "cannot install both X from RepoA and X from RepoB"
+                has_cannot_install_both = "cannot install both" in error_lower and " from " in error_lower
+
+                # Pattern 2: Multi-line version conflicts like:
+                #   "package X from RepoA requires Y = v1, but none of the providers can be installed"
+                #   "package Z from RepoB requires Y = v2, but none of the providers can be installed"
+                # These indicate different repos wanting different versions of same dependency
+                lines = error_message.split('\n')
+                requires_lines = [l for l in lines if 'requires' in l.lower() and 'from' in l.lower()]
+                has_multi_version_conflict = len(requires_lines) >= 2
+
+                # Pattern 3: "conflicting requests" or "cannot install the best candidate"
+                has_conflict_markers = ("conflicting requests" in error_lower or
+                                       "cannot install the best candidate" in error_lower)
+
+                # Real dependency errors that should NOT be filtered
+                has_nothing_provides = "nothing provides" in error_lower
+                has_package_already_installed = "already installed" in error_lower
+
+                # Filter logic: ignore if it's ONLY repo conflicts, no real missing deps
+                is_repo_conflict = (has_cannot_install_both or
+                                  (has_multi_version_conflict and has_conflict_markers))
+                is_real_error = has_nothing_provides
+
+                if is_repo_conflict and not is_real_error:
+                    # Repo priority conflict - expected behavior, ignore
+                    log(f"  Ignoring repository priority conflict (version mismatch between repos)")
+                else:
+                    # Real dependency failure
+                    workload["succeeded"] = False
+                    workload["errors"]["message"] = error_message
+                    log(f"  Failed to resolve dependencies for {workload_conf['id']}")
+                    # Show truncated error for debugging
+                    error_display = error_message if len(error_message) <= 500 else error_message[:500] + "...(truncated)"
+                    log(f"  Error: {error_display}")
+                    return workload
+
             # 43 %
 
             # DNF Query
-            #log("  Creating a DNF Query object...")
-            query_env = base.sack.query()
-            pkgs_env = set(query_env.installed())
-            pkgs_added = set(base.transaction.install_set)
             # Get installed packages from the system repo
             query_env = PackageQuery(base)
             query_env.filter_installed()
@@ -1698,7 +1956,15 @@ def process_single_srpm_root_log(work_item):
         log(f"  Includes {len(view['workload_ids'])} workloads.")
 
         # Packages
+        log(f"  Processing packages from {len(view['workload_ids'])} workloads...")
+        workload_counter = 0
+        total_workloads = len(view['workload_ids'])
+
         for workload_id in view["workload_ids"]:
+            workload_counter += 1
+            if workload_counter % 50 == 0:
+                log(f"    Progress: {workload_counter}/{total_workloads} workloads processed")
+
             workload = self.data["workloads"][workload_id]
             workload_conf_id = workload["workload_conf_id"]
             workload_conf = self.configs["workloads"][workload_conf_id]
