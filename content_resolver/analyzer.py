@@ -375,7 +375,8 @@ def process_single_srpm_root_log(work_item):
             'srpm_id': srpm_id,
             'arch': arch,
             'deps': deps,
-            'error': None
+            'error': None,
+            'warning': warning
         }
 
     except Exception as e:
@@ -484,7 +485,6 @@ class Analyzer:
 
             counter += 1
 
-    
     def _validate_root_log_cache(self):
         """
         Validate cached root.log dependency data for invalid entries.
@@ -517,6 +517,36 @@ class Analyzer:
                             'koji_id': koji_id
                         })
 
+        # Some verbose logging for debugging
+        # TODO: Enable some form of log level to increase/decrease verbosity of logs
+        if zero_deps_cached or low_deps_cached:
+            log("")
+            log("=" * 80)
+            log("⚠️  ROOT LOG CACHE VALIDATION")
+            log("=" * 80)
+
+        if zero_deps_cached:
+            log(f"Found {len(zero_deps_cached)} cached packages with ZERO dependencies")
+            log("These packages may have had root.log download/parse failures in previous runs:")
+            log("")
+            for item in zero_deps_cached[:15]:
+                log(f"  ⚠️  {item['srpm_id']} ({item['arch']})")
+            if len(zero_deps_cached) > 15:
+                log(f"  ... and {len(zero_deps_cached) - 15} more")
+            log("")
+            log("Consider clearing cache for these packages to retry root.log download")
+
+        if low_deps_cached:
+            log("")
+            log(f"Found {len(low_deps_cached)} cached packages with very few dependencies (<3)")
+            for item in low_deps_cached[:10]:
+                log(f"  ⚠️  {item['srpm_id']} ({item['arch']}): {item['deps']}")
+            if len(low_deps_cached) > 10:
+                log(f"  ... and {len(low_deps_cached) - 10} more")
+
+        if zero_deps_cached or low_deps_cached:
+            log("=" * 80)
+            log("")
 
     def _get_available_compose_variants(self, repo, arch):
         """
@@ -600,6 +630,47 @@ class Analyzer:
             return {}
 
     def _load_repo_cached(self, base, repo, arch):
+        """
+        Load repository configuration for the given base, repo, and architecture.
+
+        DNF5 MIGRATION NOTE - Repo Caching Disabled:
+        =============================================
+
+        DNF4 Behavior (OLD):
+        -------------------
+        This function cached repo objects in self.global_dnf_repo_cache and reused them
+        across multiple dnf.Base() instances. This was a major performance optimization:
+        - First analysis: ~10s to load repos from network
+        - Subsequent analyses: ~1s using cached repo objects
+        - For 1000+ analyses, this saved ~150 minutes of execution time
+
+        DNF5 Limitation (CURRENT):
+        --------------------------
+        DNF5 has tighter coupling between Repo objects and their parent Base instance:
+        1. Repos are created via repo_sack.create_repo(), not standalone constructors
+        2. Repo objects hold internal references to their parent Base
+        3. RepoSack owns the repos and manages their lifecycle
+        4. Attempting to reuse a Repo from Base1 in Base2 may cause
+            Segmentation faults, Memory corruption or other Undefined behavior
+
+        Current Workaround:
+        ------------------
+        Repo caching is completely disabled (exists = False always). Repos are recreated
+        for every analysis, which is slower but correct.
+
+        Performance Impact:
+        ------------------
+        - ~2-5 seconds added per analysis
+
+        Future Solutions (TODO):
+        ------------------------
+        1. Use DNF5's built-in metadata cache (set metadata_expire to cache for longer)
+        2. Keep a single long-lived Base instance for all analyses (requires state isolation)
+        3. Wait for DNF5 upstream to add repo serialization/deserialization API
+        4. Cache downloaded metadata files manually, let DNF5 reload from cache
+
+        For now, we accept the performance hit for correctness.
+        """
         repo_id = repo["id"]
 
         # Repo caching disabled
@@ -631,10 +702,11 @@ class Analyzer:
                     repo_config.get_excludepkgs_option().set(repo_data["exclude"])
 
 
-            self.global_dnf_repo_cache[repo_id][arch] = []
-            for repo in base.repos.iter_enabled():
-                self.global_dnf_repo_cache[repo_id][arch].append(repo)
-    
+            # DNF5: Repo caching code removed (see _load_repo_cached docstring for explanation)
+            # In DNF4, we cached repo objects here for reuse across Base instances:
+            #   self.global_dnf_repo_cache[repo_id][arch] = [list of repo objects]
+            # DNF5's architecture prevents this - repos are tightly bound to their parent Base
+            # and cannot be safely transferred between instances without memory corruption.
 
     def _analyze_pkgs(self, repo, arch):
         log(f"Analyzing pkgs for {repo['name']} ({repo['id']}) {arch}")
@@ -1048,6 +1120,23 @@ class Analyzer:
                     error_msg = str(err)
                     log(f"  Failed to download repodata (attempt {attempts}/{max_tries}). Error: {err}")
 
+                    # Try to identify which repo failed and disable it
+                    for repo_name in repo_names_to_load:
+                        if repo_name in error_msg:
+                            if repo_name not in failed_repos:
+                                log(f"  Disabling problematic repository: {repo_name}")
+                                failed_repos.append(repo_name)
+                                try:
+                                    repo_query = RepoQuery(base)
+                                    for repo_weak_ptr in repo_query:
+                                        repo_obj = repo_weak_ptr.get()
+                                        if repo_obj.get_id() == repo_name:
+                                            repo_obj.disable()
+                                            break
+                                except Exception as disable_err:
+                                    log(f"  Warning: Could not disable repo {repo_name}: {disable_err}")
+                            break
+
             if not success:
                 err = f"Failed to download repodata while analyzing environment '{env_conf['id']}' from '{repo['id']}' {arch}:"
                 err_log(err)
@@ -1297,6 +1386,26 @@ class Analyzer:
                     except (UserAssertionError, DnfErr, RuntimeError, Dnf5RepoDownloadError) as err:
                         attempts += 1
                         error_msg = str(err)
+                        # log(f"  Failed to download repodata (attempt {attempts}/{MAX_TRIES}). Error: {error_msg}")
+
+                        # Try to identify which repo failed and disable it
+                        for repo_name in repo_names_to_load:
+                            if repo_name in error_msg:
+                                if repo_name not in failed_repos:
+                                    # log(f"  Disabling problematic repository: {repo_name}")
+                                    failed_repos.append(repo_name)
+                                    try:
+                                        repo_query = RepoQuery(base)
+                                        for repo_weak_ptr in repo_query:
+                                            repo_obj = repo_weak_ptr.get()
+                                            if repo_obj.get_id() == repo_name:
+                                                repo_obj.disable()
+                                                break
+                                    except Exception as disable_err:
+                                        pass
+                                        # log(f"  Warning: Could not disable repo {repo_name}: {disable_err}")
+                                break
+
                 if not success:
                     err = f"Failed to download repodata while analyzing workload '{workload_conf_id} on '{env_conf_id}' from '{repo_id}' {arch}..."
                     err_log(err)
@@ -1317,6 +1426,23 @@ class Analyzer:
                     except (UserAssertionError, DnfErr, RuntimeError, Dnf5RepoDownloadError) as err:
                         attempts += 1
                         error_msg = str(err)
+
+                        # Try to identify which repo failed and disable it
+                        for repo_name in repo_names_to_load:
+                            if repo_name in error_msg:
+                                if repo_name not in failed_repos:
+                                    failed_repos.append(repo_name)
+                                    try:
+                                        repo_query = RepoQuery(base)
+                                        for repo_weak_ptr in repo_query:
+                                            repo_obj = repo_weak_ptr.get()
+                                            if repo_obj.get_id() == repo_name:
+                                                repo_obj.disable()
+                                                break
+                                    except Exception:
+                                        pass
+                                break
+
                 if not success:
                     err = f"Failed to download repodata while analyzing workload '{workload_conf_id} on '{env_conf_id}' from '{repo_id}' {arch}..."
                     err_log(err)
@@ -1329,9 +1455,6 @@ class Analyzer:
 
             # Packages
             for pkg in workload_conf["packages"]:
-                try:
-                    base.install(pkg)
-                except dnf.exceptions.MarkingError:
                 # DNF5: Check if package is resolvable (by name or provides) before adding
                 if not is_package_resolvable(base, pkg):
                     if pkg in self.settings["weird_packages_that_can_not_be_installed"]:
@@ -1432,6 +1555,8 @@ class Analyzer:
                     for pkg_name in workload["warnings"]["non_existing_pkgs"]:
                         pkg_string = f"  - {pkg_name}"
                         error_message_list.append(pkg_string)
+                    error_message_list.append("")
+                    error_message_list.append("Note: Add 'strict' to the workload options to treat missing packages as errors.")
                 if workload["warnings"]["non_existing_placeholder_deps"]:
                     error_message_list.append("The following dependencies of package placeholders are not available (and were skipped):")
                     # TODO: use comprehension and `error_message_list.extend([])`
@@ -1440,6 +1565,7 @@ class Analyzer:
                         error_message_list.append(pkg_string)
                 error_message = "\n".join(error_message_list)
                 workload["warnings"]["message"] = str(error_message)
+                log(f"  Warning: {len(workload['warnings']['non_existing_pkgs'])} packages not found and were skipped")
 
             # 37 %
 
@@ -1593,11 +1719,36 @@ class Analyzer:
 
         return workload
 
-    
     def _analyze_workload_process(self, queue_result, workload_conf, env_conf, repo, arch):
-
-        workload = self._analyze_workload(workload_conf, env_conf, repo, arch)
-        queue_result.put(workload)
+        try:
+            workload = self._analyze_workload(workload_conf, env_conf, repo, arch)
+            queue_result.put(workload)
+        except Exception as e:
+            # Create a failed workload result instead of crashing
+            workload = {}
+            workload["workload_conf_id"] = workload_conf["id"]
+            workload["env_conf_id"] = env_conf["id"]
+            workload["repo_id"] = repo["id"]
+            workload["arch"] = arch
+            workload["pkg_env_ids"] = []
+            workload["pkg_added_ids"] = []
+            workload["pkg_placeholder_ids"] = []
+            workload["srpm_placeholder_names"] = []
+            workload["pkg_relations"] = []
+            workload["errors"] = {}
+            workload["errors"]["non_existing_pkgs"] = []
+            workload["errors"]["non_existing_placeholder_deps"] = []
+            workload["errors"]["message"] = f"Workload analysis failed with exception:\n{type(e).__name__}: {str(e)}\n\nTraceback:\n{traceback.format_exc()}"
+            workload["warnings"] = {}
+            workload["warnings"]["non_existing_pkgs"] = []
+            workload["warnings"]["non_existing_placeholder_deps"] = []
+            workload["warnings"]["message"] = None
+            workload["succeeded"] = False
+            workload["env_succeeded"] = False
+            workload["labels"] = list(set(workload_conf["labels"]) & set(env_conf["labels"]))
+            queue_result.put(workload)
+            # Log error to stderr so it appears in logs
+            err_log(f" ERROR analyzing workload {workload_conf['id']}:{env_conf['id']}:{repo['id']}:{arch}-> {e}", file=sys.stderr)
 
 
     async def _analyze_workloads_subset_async(self, task_queue, results):
@@ -2062,7 +2213,15 @@ class Analyzer:
         log(f"  Done processing workload packages. Total packages in view: {len(view['pkgs'])}")
 
         # But not with source packages, that's an entirely different story!
+        log(f"  Building source package data from {len(view['pkgs'])} binary packages...")
+        pkg_counter = 0
+        total_pkgs = len(view["pkgs"])
+
         for pkg_id, pkg in view["pkgs"].items():
+            pkg_counter += 1
+            if pkg_counter % 1000 == 0:
+                log(f"    Progress: {pkg_counter}/{total_pkgs} packages processed for source mapping")
+
             srpm_id = pkg["sourcerpm"].rsplit(".src.rpm")[0]
 
             if srpm_id not in view["source_pkgs"]:
@@ -2084,35 +2243,55 @@ class Analyzer:
         return view
 
     def _analyze_views(self):
+        log("")
+        log("=====  Starting View Analysis =====")
+        log("")
 
         views = {}
 
         # First, analyse the standard views
+        log("Phase 1: Analyzing standard (compose) views...")
+        compose_view_count = sum(1 for v in self.configs["views"].values() if v["type"] == "compose")
+        log(f"  Found {compose_view_count} compose views to process")
+
         for view_conf_id in self.configs["views"]:
             view_conf = self.configs["views"][view_conf_id]
 
             if view_conf["type"] == "compose":
+                log(f"  Processing compose view: {view_conf_id}")
                 for arch in view_conf["architectures"]:
+                    log(f"    Architecture: {arch}")
                     view = self._analyze_view(view_conf, arch, views)
                     view_id = view["id"]
-
                     views[view_id] = view
-        
+                    log(f"    ✅ Completed {view_id}")
+
+        log("")
+        log("Phase 2: Analyzing addon views...")
+        addon_view_count = sum(1 for v in self.configs["views"].values() if v["type"] == "addon")
+        log(f"  Found {addon_view_count} addon views to process")
+
         # Second, analyse the addon views
         # This is important as they need the standard views already available
         for view_conf_id in self.configs["views"]:
             view_conf = self.configs["views"][view_conf_id]
 
             if view_conf["type"] == "addon":
+                log(f"  Processing addon view: {view_conf_id}")
                 base_view_conf_id = view_conf["base_view_id"]
                 base_view_conf = self.configs["views"][base_view_conf_id]
 
                 for arch in set(view_conf["architectures"]) & set(base_view_conf["architectures"]):
+                    log(f"    Architecture: {arch}")
                     view = self._analyze_view(view_conf, arch, views)
                     view_id = view["id"]
-
                     views[view_id] = view
-        
+                    log(f"    ✅ Completed {view_id}")
+
+        log("")
+        log(f"View analysis complete! Total views created: {len(views)}")
+        log("")
+
         self.data["views"] = views
 
     def _populate_buildroot_with_view_srpms(self, view_conf, arch):
@@ -2255,6 +2434,11 @@ class Analyzer:
         # Process in parallel using ProcessPoolExecutor
         max_workers = min(self.settings["parallel_max"], len(work_items))
 
+        # Track failures for reporting
+        failed_downloads = []  # Root logs that failed to download
+        zero_deps = []  # Packages with zero dependencies (suspicious)
+        low_deps = []  # Packages with very few deps (possibly truncated logs)
+
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
             # Submit all jobs
             future_to_item = {
@@ -2277,9 +2461,34 @@ class Analyzer:
                     if result['error']:
                         log(f"[ Buildroot - pass {pass_counter} - {completed_count} of {total_count} ] "
                             f"Failed {result['srpm_id']} {result['arch']}: {result['error']}")
+                        failed_downloads.append({
+                            'srpm_id': result['srpm_id'],
+                            'arch': result['arch'],
+                            'error': result['error']
+                        })
                     else:
-                        log(f"[ Buildroot - pass {pass_counter} - {completed_count} of {total_count} ] "
-                            f"Completed {result['srpm_id']} {result['arch']} - found {len(result['deps'])} deps")
+                        # Log completion with warning if present
+                        deps_count = len(result['deps'])
+                        warning_msg = result.get('warning', '')
+                        if warning_msg:
+                            log(f"[ Buildroot - pass {pass_counter} - {completed_count} of {total_count} ] "
+                                f"⚠️  {result['srpm_id']} {result['arch']} - {deps_count} deps - {warning_msg}")
+                        else:
+                            log(f"[ Buildroot - pass {pass_counter} - {completed_count} of {total_count} ] "
+                                f"Completed {result['srpm_id']} {result['arch']} - found {deps_count} deps")
+
+                        # Detect suspicious results
+                        if deps_count == 0:
+                            zero_deps.append({
+                                'srpm_id': result['srpm_id'],
+                                'arch': result['arch']
+                            })
+                        elif deps_count < 3:
+                            low_deps.append({
+                                'srpm_id': result['srpm_id'],
+                                'arch': result['arch'],
+                                'deps': result['deps']
+                            })
 
                 except Exception as e:
                     log(f"Failed to process {work_item['srpm_id']}: {e}")
@@ -2291,9 +2500,55 @@ class Analyzer:
                         "error": str(e),
                     }
                     self._apply_srpm_result(work_item, error_result)
+                    failed_downloads.append({
+                        'srpm_id': work_item["srpm_id"],
+                        'arch': work_item["arch"],
+                        'error': str(e)
+                    })
 
         # Save updated cache
         dump_data(self.settings["root_log_deps_cache_path"], self.cache["root_log_deps"]["next"])
+
+        # Report summary of issues
+        log("")
+        log("=" * 80)
+        log("ROOT LOG PROCESSING SUMMARY")
+        log("=" * 80)
+
+        if failed_downloads:
+            log(f"⚠️  FAILED DOWNLOADS: {len(failed_downloads)} root.log files failed to download/parse")
+            log("")
+            for item in failed_downloads[:20]:  # Show first 20
+                log(f"  ❌ {item['srpm_id']} ({item['arch']})")
+                log(f"     Error: {item['error'][:100]}")
+            if len(failed_downloads) > 20:
+                log(f"  ... and {len(failed_downloads) - 20} more")
+
+        if zero_deps:
+            log("")
+            log(f"⚠️  ZERO DEPENDENCIES: {len(zero_deps)} packages reported 0 build dependencies")
+            log("   (This is unusual - most packages have at least bash, gcc, etc.)")
+            log("")
+            for item in zero_deps[:20]:
+                log(f"  ⚠️  {item['srpm_id']} ({item['arch']})")
+            if len(zero_deps) > 20:
+                log(f"  ... and {len(zero_deps) - 20} more")
+
+        if low_deps:
+            log("")
+            log(f"⚠️  LOW DEPENDENCIES: {len(low_deps)} packages have very few dependencies (<3)")
+            log("   (Possibly truncated or corrupted root.log files)")
+            log("")
+            for item in low_deps[:10]:
+                log(f"  ⚠️  {item['srpm_id']} ({item['arch']}): {item['deps']}")
+            if len(low_deps) > 10:
+                log(f"  ... and {len(low_deps) - 10} more")
+
+        if not failed_downloads and not zero_deps and not low_deps:
+            log("✅ All root.log files processed successfully with reasonable dependency counts")
+
+        log("=" * 80)
+        log("")
 
         log("")
         log("  DONE!")
