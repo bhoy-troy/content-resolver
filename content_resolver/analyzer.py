@@ -427,10 +427,6 @@ class Analyzer:
 
         self.configs = configs
         self.settings = settings
-
-        # DNF5: Repo cache is unused (kept for potential future implementation)
-        # See _load_repo_cached() docstring for why repo caching is disabled in DNF5
-        self.global_dnf_repo_cache = {}
         self.data = {}
         self.cache = {}
 
@@ -636,6 +632,11 @@ class Analyzer:
         DNF5 MIGRATION NOTE - Repo Caching Disabled:
         =============================================
 
+        DNF5: Repo caching code removed (see _load_repo_cached docstring for explanation)
+        In DNF4, we cached repo objects here for reuse across Base instances:
+        DNF5's architecture prevents this - repos are tightly bound to their parent Base
+        and cannot be safely transferred between instances without memory corruption.
+
         DNF4 Behavior (OLD):
         -------------------
         This function cached repo objects in self.global_dnf_repo_cache and reused them
@@ -653,15 +654,6 @@ class Analyzer:
         4. Attempting to reuse a Repo from Base1 in Base2 may cause
             Segmentation faults, Memory corruption or other Undefined behavior
 
-        Current Workaround:
-        ------------------
-        Repo caching is completely disabled (exists = False always). Repos are recreated
-        for every analysis, which is slower but correct.
-
-        Performance Impact:
-        ------------------
-        - ~2-5 seconds added per analysis
-
         Future Solutions (TODO):
         ------------------------
         1. Use DNF5's built-in metadata cache (set metadata_expire to cache for longer)
@@ -669,44 +661,32 @@ class Analyzer:
         3. Wait for DNF5 upstream to add repo serialization/deserialization API
         4. Cache downloaded metadata files manually, let DNF5 reload from cache
 
-        For now, we accept the performance hit for correctness.
         """
+
         repo_id = repo["id"]
 
-        # Repo caching disabled
-        exists = False
+        # Get available variants from composeinfo.json (if configured)
+        available_variants = self._get_available_compose_variants(repo, arch)
 
-        if not exists:
+        for repo_name, repo_data in repo["source"]["repos"].items():
+            if repo_data["limit_arches"] and arch not in repo_data["limit_arches"]:
+                continue
 
-            # Get available variants from composeinfo.json (if configured)
-            available_variants = self._get_available_compose_variants(repo, arch)
+            # Check if variant exists in compose (if composeinfo is available)
+            if available_variants and not available_variants.get(repo_name, True):
+                log(f"  Skipping {repo_name} on {arch} (not in compose)")
+                continue
 
-            for repo_name, repo_data in repo["source"]["repos"].items():
-                if repo_data["limit_arches"] and arch not in repo_data["limit_arches"]:
-                    # log("  Skipping {} on {}".format(repo_name, arch))
-                    continue
+            config = base.get_config()
+            repo_sack = base.get_repo_sack()
+            additional_repo = repo_sack.create_repo(repo_name)
+            repo_config = additional_repo.get_config()
+            repo_config.get_baseurl_option().set([repo_data["baseurl"]])
+            repo_config.get_priority_option().set(repo_data["priority"])
+            # DNF5: Set excludes via repo config, not repo_sack
+            if repo_data["exclude"]:
+                repo_config.get_excludepkgs_option().set(repo_data["exclude"])
 
-                # Check if variant exists in compose (if composeinfo is available)
-                if available_variants and not available_variants.get(repo_name, True):
-                    log(f"  Skipping {repo_name} on {arch} (not in compose)")
-                    continue
-
-                config = base.get_config()
-                repo_sack = base.get_repo_sack()
-                additional_repo = repo_sack.create_repo(repo_name)
-                repo_config = additional_repo.get_config()
-                repo_config.get_baseurl_option().set([repo_data["baseurl"]])
-                repo_config.get_priority_option().set(repo_data["priority"])
-                # DNF5: Set excludes via repo config, not repo_sack
-                if repo_data["exclude"]:
-                    repo_config.get_excludepkgs_option().set(repo_data["exclude"])
-
-
-            # DNF5: Repo caching code removed (see _load_repo_cached docstring for explanation)
-            # In DNF4, we cached repo objects here for reuse across Base instances:
-            #   self.global_dnf_repo_cache[repo_id][arch] = [list of repo objects]
-            # DNF5's architecture prevents this - repos are tightly bound to their parent Base
-            # and cannot be safely transferred between instances without memory corruption.
 
     def _analyze_pkgs(self, repo, arch):
         log(f"Analyzing pkgs for {repo['name']} ({repo['id']}) {arch}")
@@ -952,72 +932,6 @@ class Analyzer:
 
         return relations
 
-        # TODO: DNF5 filter API needs reimplementation below
-        # This code is never reached, ** keep as sample **
-
-        for pkg in dnf_query:
-            pkg_id = f"{pkg.get_name()}-{pkg.get_evr()}.{pkg.get_arch()}"
-
-            required_by = set()
-            recommended_by = set()
-            suggested_by = set()
-            supplements = set()
-
-            for dep_pkg in dnf_query.filter(requires=[pkg]):
-                dep_pkg_id = f"{dep_pkg.name}-{dep_pkg.evr}.{dep_pkg.arch}"
-                required_by.add(dep_pkg_id)
-
-            if self._global_performance_hack_run_recommends_queries:
-                for dep_pkg in dnf_query.filter(recommends=[pkg]):
-                    dep_pkg_id = f"{dep_pkg.name}-{dep_pkg.evr}.{dep_pkg.arch}"
-                    recommended_by.add(dep_pkg_id)
-
-            # for dep_pkg in dnf_query.filter(suggests=[pkg]):
-            #    dep_pkg_id = "{name}-{evr}.{arch}".format(
-            #        name=dep_pkg.name,
-            #        evr=dep_pkg.evr,
-            #        arch=dep_pkg.arch
-            #    )
-            #    suggested_by.add(dep_pkg_id)
-
-            # Find packages that this pkg supplements
-            for supplement_reldep in pkg.supplements:
-                # Find packages in the query that provide this supplement
-                providing_pkgs = dnf_query.filter(provides=[supplement_reldep])
-                for providing_pkg in providing_pkgs:
-                    supplement_pkg_id = f"{providing_pkg.name}-{providing_pkg.evr}.{providing_pkg.arch}"
-                    supplements.add(supplement_pkg_id)
-
-            relations[pkg_id] = {}
-            relations[pkg_id]["required_by"] = sorted(list(required_by))
-            relations[pkg_id]["recommended_by"] = sorted(list(recommended_by))
-            relations[pkg_id]["supplements"] = sorted(list(supplements))
-            #relations[pkg_id]["suggested_by"] = sorted(list(suggested_by))
-            relations[pkg_id]["suggested_by"] = []
-            relations[pkg_id]["source_name"] = pkg.source_name
-            relations[pkg_id]["reponame"] = pkg.reponame
-
-        if package_placeholders:
-            for placeholder_name,placeholder_data in package_placeholders.items():
-                placeholder_id = pkg_placeholder_name_to_id(placeholder_name)
-
-                relations[placeholder_id] = {}
-                relations[placeholder_id]["required_by"] = []
-                relations[placeholder_id]["recommended_by"] = []
-                relations[placeholder_id]["suggested_by"] = []
-                relations[placeholder_id]["supplements"] = []
-                relations[placeholder_id]["reponame"] = None
-
-            # TODO: triple for loop!!!!
-            for placeholder_name, placeholder_data in package_placeholders.items():
-                placeholder_id = pkg_placeholder_name_to_id(placeholder_name)
-                for placeholder_dependency_name in placeholder_data["requires"]:
-                    for pkg_id in relations:
-                        pkg_name = pkg_id_to_name(pkg_id)
-                        if pkg_name == placeholder_dependency_name:
-                            relations[pkg_id]["required_by"].append(placeholder_id)
-
-        return relations
 
     def _analyze_env_without_leaking(self, env_conf, repo, arch):
 
@@ -1091,8 +1005,6 @@ class Analyzer:
             base.setup()
 
             # Load repos
-            #log("  Loading repos...")
-            #base.read_all_repos()
             self._load_repo_cached(base, repo, arch)
 
             # Build list of repo names for error handling
@@ -1353,8 +1265,6 @@ class Analyzer:
             base.setup()
 
             # Load repos
-            #log("  Loading repos...")
-            #base.read_all_repos()
             self._load_repo_cached(base, repo, arch)
 
             # Build list of repo names for error handling
@@ -1374,11 +1284,11 @@ class Analyzer:
                 # It's not empty! Load local data.
                 # DNF5: This loads both repos and system data
                 # This sometimes fails, so let's try at least N times with repo-disabling logic
-                MAX_TRIES = 10
+                max_tries = 10
                 attempts = 0
                 success = False
                 failed_repos = []
-                while attempts < MAX_TRIES:
+                while attempts < max_tries:
                     try:
                         repo_sack.load_repos()
                         success = True
@@ -1407,7 +1317,8 @@ class Analyzer:
                                 break
 
                 if not success:
-                    err = f"Failed to download repodata while analyzing workload '{workload_conf_id} on '{env_conf_id}' from '{repo_id}' {arch}..."
+                    err = (f"Failed to download repodata while analyzing workload '{workload['workload_conf_id']}' on "
+                           f"'{workload['env_conf_id']}' from '{workload['repo_id']}' {workload['arch']}...")
                     err_log(err)
                     raise RepoDownloadError(err)
             else:
@@ -1444,7 +1355,8 @@ class Analyzer:
                                 break
 
                 if not success:
-                    err = f"Failed to download repodata while analyzing workload '{workload_conf_id} on '{env_conf_id}' from '{repo_id}' {arch}..."
+                    err = (f"Failed to download repodata while analyzing workload '{workload['workload_conf_id']}' on "
+                           f"'{workload['env_conf_id']}' from '{workload['repo_id']}' {workload['arch']}...")
                     err_log(err)
                     raise RepoDownloadError(err)
 
@@ -1480,10 +1392,7 @@ class Analyzer:
                     workload["errors"]["non_existing_pkgs"].append(grp_spec)
                     continue
 
-                # TODO: Mark group packages as required... the following code doesn't work
-                # for pkg in group.packages_iter():
-                #    print(pkg.name)
-                #    workload_conf["packages"].append(pkg.name)
+                # TODO: Mark group packages as required...
 
             # Filter out the relevant package placeholders for this arch
             package_placeholders = {}
@@ -1506,7 +1415,6 @@ class Analyzer:
                     srpm_placeholders[placeholder_name] = placeholder_data
 
             # Dependencies of package placeholders
-            # log("  Adding package placeholder dependencies...")
             for placeholder_name, placeholder_data in package_placeholders.items():
                 for pkg in placeholder_data["requires"]:
                     # DNF5: Check if package is resolvable (by name or provides) before adding
@@ -1544,8 +1452,6 @@ class Analyzer:
                 error_message = "\n".join(error_message_list)
                 workload["succeeded"] = False
                 workload["errors"]["message"] = str(error_message)
-                #log("  Failed!  (Error message will be on the workload results page.")
-                #log("")
                 return workload
 
             if workload["warnings"]["non_existing_pkgs"] or workload["warnings"]["non_existing_placeholder_deps"]:
@@ -1567,16 +1473,12 @@ class Analyzer:
                 workload["warnings"]["message"] = str(error_message)
                 log(f"  Warning: {len(workload['warnings']['non_existing_pkgs'])} packages not found and were skipped")
 
-            # 37 %
-
             # Resolve dependencies
-            #log("  Resolving dependencies...")
             try:
                 # DNF5: resolve via goal
                 transaction = goal.resolve()
             except (DnfErr, RuntimeError, Exception) as err:
                 workload["succeeded"] = False
-
                 # Enhanced error message for dependency failures
                 error_message = str(err)
 
@@ -1658,8 +1560,6 @@ class Analyzer:
                     log(f"  Error: {error_display}")
                     return workload
 
-            # 43 %
-
             # DNF Query
             # Get installed packages from the system repo
             query_env = PackageQuery(base)
@@ -1696,26 +1596,11 @@ class Analyzer:
             for srpm_placeholder_name in srpm_placeholders:
                 workload["srpm_placeholder_names"].append(srpm_placeholder_name)
 
-            # 43 %
-
             # Use the actual packages that were installed/selected by DNF's priority logic.
             # Don't re-query by name - that would return ALL versions from ALL repos,
             # including lower-priority duplicates (e.g., both ELN and Rawhide versions).
             workload["pkg_relations"] = self._analyze_package_relations(pkgs_all, package_placeholders)
 
-            # 100 %
-
-            pkg_env_count = len(workload["pkg_env_ids"])
-            pkg_added_count = len(workload["pkg_added_ids"])
-
-            # How long do various parts take:
-            # 37 % - populatind DNF's base.sack
-            # 6 %  - resolving deps
-            # 57 % - _analyze_package_relations with recommends
-
-            # Removing recommends from _analyze_package_relations
-            # gets the total duration down to
-            # 64 %
 
         return workload
 
@@ -3620,31 +3505,23 @@ class Analyzer:
                     # 1/  maintainer_recommendation
 
                     if workload_maintainer not in pkg["maintainer_recommendation"]:
-                        #pkg["maintainer_recommendation"][workload_maintainer] = set()
                         self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation"][workload_maintainer] = set()
 
-                    #pkg["maintainer_recommendation"][workload_maintainer].add(score)
                     self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation"][workload_maintainer].add(score)
 
                     # 2/  maintainer_recommendation_details
 
                     if level not in pkg["maintainer_recommendation_details"]:
-                        #pkg["maintainer_recommendation_details"][level] = {}
                         self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level] = {}
 
                     if sublevel not in pkg["maintainer_recommendation_details"][level]:
-                        #pkg["maintainer_recommendation_details"][level][sublevel] = {}
                         self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level][sublevel] = {}
 
                     if workload_maintainer not in pkg["maintainer_recommendation_details"][level][sublevel]:
-                        #pkg["maintainer_recommendation_details"][level][sublevel][workload_maintainer] = {}
-                        #pkg["maintainer_recommendation_details"][level][sublevel][workload_maintainer]["reasons"] = {}
-                        #pkg["maintainer_recommendation_details"][level][sublevel][workload_maintainer]["locations"] = {}
                         self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level][sublevel][workload_maintainer] = {}
                         self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level][sublevel][workload_maintainer]["reasons"] = set()
                         self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level][sublevel][workload_maintainer]["locations"] = set()
 
-                    #pkg["maintainer_recommendation_details"][level][sublevel][workload_maintainer]["locations"].add(workload_conf_id)
                     self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level][sublevel][workload_maintainer]["locations"].add(workload_conf_id)
 
             # Lie to the while loop so it runs at least once
@@ -3699,31 +3576,23 @@ class Analyzer:
                                     # 1/  maintainer_recommendation
 
                                     if buildroot_srpm_maintainer not in pkg["maintainer_recommendation"]:
-                                        #pkg["maintainer_recommendation"][workload_maintainer] = set()
                                         self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation"][buildroot_srpm_maintainer] = set()
 
-                                    #pkg["maintainer_recommendation"][buildroot_srpm_maintainer].add(score)
                                     self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation"][buildroot_srpm_maintainer].add(score)
 
                                     # 2/  maintainer_recommendation_details
 
                                     if level not in pkg["maintainer_recommendation_details"]:
-                                        #pkg["maintainer_recommendation_details"][level] = {}
                                         self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level] = {}
 
                                     if sublevel not in pkg["maintainer_recommendation_details"][level]:
-                                        #pkg["maintainer_recommendation_details"][level][sublevel] = {}
                                         self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level][sublevel] = {}
 
                                     if buildroot_srpm_maintainer not in pkg["maintainer_recommendation_details"][level][sublevel]:
-                                        #pkg["maintainer_recommendation_details"][level][sublevel][buildroot_srpm_maintainer] = {}
-                                        #pkg["maintainer_recommendation_details"][level][sublevel][buildroot_srpm_maintainer]["reasons"] = {}
-                                        #pkg["maintainer_recommendation_details"][level][sublevel][buildroot_srpm_maintainer]["locations"] = {}
                                         self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level][sublevel][buildroot_srpm_maintainer] = {}
                                         self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level][sublevel][buildroot_srpm_maintainer]["reasons"] = set()
                                         self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level][sublevel][buildroot_srpm_maintainer]["locations"] = set()
 
-                                    #pkg["maintainer_recommendation_details"][level][sublevel][buildroot_srpm_maintainer]["locations"].add(buildroot_srpm_name)
                                     self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level][sublevel][buildroot_srpm_maintainer]["locations"].add(buildroot_srpm_name)
 
 
@@ -3779,26 +3648,19 @@ class Analyzer:
                                     # 1/  maintainer_recommendation
 
                                     if superior_pkg_maintainer not in pkg["maintainer_recommendation"]:
-                                        #pkg["maintainer_recommendation"][workload_maintainer] = set()
                                         self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation"][superior_pkg_maintainer] = set()
 
-                                    #pkg["maintainer_recommendation"][superior_pkg_maintainer].add(score)
                                     self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation"][superior_pkg_maintainer].add(score)
 
                                     # 2/  maintainer_recommendation_details
 
                                     if level not in pkg["maintainer_recommendation_details"]:
-                                        #pkg["maintainer_recommendation_details"][level] = {}
                                         self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level] = {}
 
                                     if sublevel not in pkg["maintainer_recommendation_details"][level]:
-                                        #pkg["maintainer_recommendation_details"][level][sublevel] = {}
                                         self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level][sublevel] = {}
 
                                     if superior_pkg_maintainer not in pkg["maintainer_recommendation_details"][level][sublevel]:
-                                        #pkg["maintainer_recommendation_details"][level][sublevel][superior_pkg_maintainer] = {}
-                                        #pkg["maintainer_recommendation_details"][level][sublevel][superior_pkg_maintainer]["reasons"] = {}
-                                        #pkg["maintainer_recommendation_details"][level][sublevel][superior_pkg_maintainer]["locations"] = {}
                                         self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level][sublevel][superior_pkg_maintainer] = {}
                                         self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level][sublevel][superior_pkg_maintainer]["reasons"] = set()
                                         self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level][sublevel][superior_pkg_maintainer]["locations"] = set()
@@ -3808,7 +3670,6 @@ class Analyzer:
                                     self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level][sublevel][superior_pkg_maintainer]["locations"].update(locations)
 
                                     reason = (superior_pkg_name, superior_srpm_name, pkg_name)
-                                    #pkg["maintainer_recommendation_details"][level][sublevel][superior_pkg_maintainer]["reasons"].add(reason)
                                     self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level][sublevel][superior_pkg_maintainer]["reasons"].add(reason)
 
 
