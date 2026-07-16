@@ -18,7 +18,7 @@ Content Resolver also helps with minimisation efforts by showing detailed depend
 
 Core functionality
 
-```
+```text
 content-resolver/
 ├── content_resolver/
 │   ├── analyzer.py         # Core resolution engine (DNF5)
@@ -172,7 +172,7 @@ The output will be generated in the `output` directory. Open the `output/index.h
 ### Resolution Process
 
 **Phase 1: Repository Analysis**
-```
+```text
 For each repository and architecture:
   1. Create DNF5 Base with repository configuration
   2. Apply repository priorities (1=highest)
@@ -184,7 +184,7 @@ For each repository and architecture:
 ```
 
 **Phase 2: Environment Resolution**
-```
+```text
 For each environment:
   1. Create DNF5 Goal with environment packages
   2. Resolve dependencies using DNF5 transaction
@@ -194,7 +194,7 @@ For each environment:
 ```
 
 **Phase 3: Workload Resolution**
-```
+```text
 For each workload on top of each environment:
   1. Load base environment packages
   2. Add workload-specific packages to Goal
@@ -204,7 +204,7 @@ For each workload on top of each environment:
 ```
 
 **Phase 4: Buildroot Resolution** (for views with `buildroot_strategy: root_logs`)
-```
+```text
 For each source package in the view:
   1. Download Koji root.log via Koji API
   2. Parse build dependencies from root log
@@ -218,7 +218,7 @@ For each source package in the view:
 
 Repositories are assigned priorities (1=highest, 5=lowest) to control package selection when multiple versions exist:
 
-```yaml
+```text
 BaseOS:     priority: 1  # Prefer packages from BaseOS
 AppStream:  priority: 1  # Prefer packages from AppStream
 CRB:        priority: 1  # CodeReady Builder
