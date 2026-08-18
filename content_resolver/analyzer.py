@@ -888,9 +888,20 @@ class Analyzer:
                 except:
                     pass
 
+    @staticmethod
+    def _resolve_dep_names(reldeps, pkg_id, provides_index):
+        """Resolve reldeps to matching pkg_ids via the provides index."""
+        matched = set()
+        for dep in reldeps:
+            matched.update(provides_index.get(dep.get_name(), set()))
+        matched.discard(pkg_id)
+        return matched
+
     def _analyze_package_relations(self, packages, package_placeholders=None):
-        """
-        Analyze package relationships for the given set of packages.
+        """Analyze package relationships for the given set of packages.
+
+        Builds a provides index from all packages, then iterates each package's
+        requires/recommends/supplements to populate reverse dependency maps.
 
         Args:
             packages: Iterable of DNF5 package objects (e.g., set, PackageQuery)
@@ -898,41 +909,67 @@ class Analyzer:
 
         Returns:
             dict: Package relations mapping pkg_id -> relation data
-
-        Note: Accepts any iterable of package objects - typically the actual packages
-        selected by DNF during installation. Do NOT pass a query filtered by name,
-        as that would include all versions from all repos (including low-priority duplicates).
         """
-        # TODO: Implement DNF5 package relationship analysis
-        # DNF5 PackageQuery.filter() API is different
-        # Temporarily returning minimal relations structure to test rest of migration
-        # DNF5 Migration Note: Unlike DNF4's filter(requires=[pkg]) API, DNF5 requires
-        # manual iteration to build reverse dependency maps. We invert the relationship:
-        # instead of asking "each dependency, record "package Y is required by package X".
-        # who requires package X?", we iterate all packages and for
         relations = {}
+        pkg_cache = {}
 
-        # Create empty relation entries for all packages
+        # Build a provides index: provide_name -> set of pkg_ids
+        provides_index = {}
+
         for pkg in packages:
             pkg_id = f"{pkg.get_name()}-{pkg.get_evr()}.{pkg.get_arch()}"
-            relations[pkg_id] = {}
-            relations[pkg_id]["required_by"] = []
-            relations[pkg_id]["recommended_by"] = []
+            pkg_cache[pkg_id] = pkg
+            relations[pkg_id] = {
+                "required_by": set(),
+                "recommended_by": set(),
+                "suggested_by": set(),
+                "supplements": set(),
+                "source_name": pkg.get_source_name(),
+                "reponame": pkg.get_repo_id(),
+            }
+
+            # Index by package name (implicit provide)
+            pkg_name = pkg.get_name()
+            provides_index.setdefault(pkg_name, set()).add(pkg_id)
+
+            # Index by explicit provides
+            for prov in pkg.get_provides():
+                provides_index.setdefault(prov.get_name(), set()).add(pkg_id)
+
+        # Build reverse dependency maps
+        for pkg_id, pkg in pkg_cache.items():
+            for provider_id in self._resolve_dep_names(pkg.get_requires(), pkg_id, provides_index):
+                relations[provider_id]["required_by"].add(pkg_id)
+
+            if self._global_performance_hack_run_recommends_queries:
+                for provider_id in self._resolve_dep_names(pkg.get_recommends(), pkg_id, provides_index):
+                    relations[provider_id]["recommended_by"].add(pkg_id)
+
+            # Supplements is the opposite direction: pkg supplements the targets
+            for target_id in self._resolve_dep_names(pkg.get_supplements(), pkg_id, provides_index):
+                relations[pkg_id]["supplements"].add(target_id)
+
+        # Convert sets to sorted lists for JSON serialization
+        for pkg_id in relations:
+            relations[pkg_id]["required_by"] = sorted(relations[pkg_id]["required_by"])
+            relations[pkg_id]["recommended_by"] = sorted(relations[pkg_id]["recommended_by"])
+            relations[pkg_id]["supplements"] = sorted(relations[pkg_id]["supplements"])
             relations[pkg_id]["suggested_by"] = []
-            relations[pkg_id]["supplements"] = []
-            relations[pkg_id]["source_name"] = pkg.get_source_name()
-            relations[pkg_id]["reponame"] = pkg.get_repo_id()
 
         if package_placeholders:
             for placeholder_name, placeholder_data in package_placeholders.items():
                 placeholder_id = pkg_placeholder_name_to_id(placeholder_name)
-
-                relations[placeholder_id] = {}
-                relations[placeholder_id]["required_by"] = []
-                relations[placeholder_id]["recommended_by"] = []
-                relations[placeholder_id]["suggested_by"] = []
-                relations[placeholder_id]["supplements"] = []
-                relations[placeholder_id]["reponame"] = None
+                relations[placeholder_id] = {
+                    "required_by": [],
+                    "recommended_by": [],
+                    "suggested_by": [],
+                    "supplements": [],
+                    "reponame": None,
+                }
+                for placeholder_dependency_name in placeholder_data["requires"]:
+                    for pkg_id in relations:
+                        if pkg_id_to_name(pkg_id) == placeholder_dependency_name:
+                            relations[pkg_id]["required_by"].append(placeholder_id)
 
         return relations
 
@@ -2936,7 +2973,7 @@ class Analyzer:
             target_pkg["hard_dependency_of_pkg_names"] = {} # of set() of nevrs
             target_pkg["weak_dependency_of_pkg_names"] = {} # if set() of nevrs
             target_pkg["reverse_weak_dependency_of_pkg_names"] = {} # if set() of nevrs
-    
+
     def _populate_pkg_or_srpm_relations_fields(self, target_pkg, source_pkg, type=None, view=None):
 
         # source_pkg is the arch-specific binary package
