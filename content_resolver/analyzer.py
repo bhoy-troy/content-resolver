@@ -16,6 +16,7 @@ from libdnf5.exception import BaseTransactionError
 from libdnf5.exception import Error as DnfErr
 from libdnf5.exception import RepoDownloadError as Dnf5RepoDownloadError
 from libdnf5.exception import UserAssertionError
+from libdnf5.common import QueryCmp_GLOB
 from libdnf5.repo import RepoQuery
 from libdnf5.rpm import PackageQuery
 
@@ -59,8 +60,16 @@ def is_package_resolvable(base: Base, pkg_name: str) -> bool:
     """
     query = PackageQuery(base)
 
+    # DNF5's filter_name() defaults to exact matching, so we must
+    # explicitly use QueryCmp_GLOB when the name contains wildcards.
+    # TODO: do we need more precise wildcard chars?
+    is_glob = any(c in pkg_name for c in ('*', '?'))
+
     # First check if it exists as a real package name
-    query.filter_name([pkg_name])
+    if is_glob:
+        query.filter_name([pkg_name], QueryCmp_GLOB)
+    else:
+        query.filter_name([pkg_name])
     if not query.empty():
         return True
 
@@ -69,7 +78,10 @@ def is_package_resolvable(base: Base, pkg_name: str) -> bool:
     # Reusing the filtered query would search for provides within the
     # already-filtered (possibly empty) result set, not all packages.
     query = PackageQuery(base)
-    query.filter_provides([pkg_name])
+    if is_glob:
+        query.filter_provides([pkg_name], QueryCmp_GLOB)
+    else:
+        query.filter_provides([pkg_name])
     if not query.empty():
         return True
 
