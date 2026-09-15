@@ -1,9 +1,22 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-bs-theme="light" style="color-scheme:light dark">
 
 <head>
   <meta charset="utf-8">
   <title>{% block title %} Content Resolver {% endblock %}</title>
+
+  <!-- Must run before any JS loads so Bootstrap's MutationObserver isn't
+       registered yet when we set data-bs-theme (avoids document.body null) -->
+  <script>
+    (function () {
+      var saved = localStorage.getItem('cr-theme');
+      var theme = saved
+        ? saved
+        : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-bs-theme', theme);
+    })();
+  </script>
+
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css"
     integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB"
     crossorigin="anonymous">
@@ -40,8 +53,42 @@
   <nav class="navbar navbar-dark bg-dark">
     <div class="container-fluid">
       <span class="navbar-brand mb-0 h1"><a style="color:white" href="./">Content Resolver</a></span>
+      <button id="theme-toggle" class="btn btn-sm btn-outline-secondary ms-auto"
+              aria-label="Toggle dark mode" title="Toggle dark mode">
+        <span id="theme-icon">🌙</span>
+      </button>
     </div>
   </nav>
+
+  <script>
+    (function () {
+      var html = document.documentElement;
+      var btn  = document.getElementById('theme-toggle');
+      var icon = document.getElementById('theme-icon');
+
+      function applyTheme(theme) {
+        html.setAttribute('data-bs-theme', theme);
+        icon.textContent = theme === 'dark' ? '☀️' : '🌙';
+        localStorage.setItem('cr-theme', theme);
+      }
+
+      // Sync icon with current theme on load (pre-paint script already set the attribute)
+      applyTheme(html.getAttribute('data-bs-theme'));
+
+      btn.addEventListener('click', function () {
+        applyTheme(html.getAttribute('data-bs-theme') === 'dark' ? 'light' : 'dark');
+      });
+
+      // Follow OS preference changes in real-time (only when user hasn't manually overridden)
+      if (window.matchMedia) {
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function (e) {
+          if (!localStorage.getItem('cr-theme')) {
+            applyTheme(e.matches ? 'dark' : 'light');
+          }
+        });
+      }
+    })();
+  </script>
   {% block content %}{% endblock %}
 
   <div class="container-fluid runtime row">
