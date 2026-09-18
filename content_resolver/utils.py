@@ -18,11 +18,11 @@ class SetEncoder(json.JSONEncoder):
         return json.JSONEncoder.default(self, obj)
 
 
-
 def load_data(path):
     with open(path, 'r') as file:
         data = json.load(file)
     return data
+
 
 def log(msg):
     print(msg, file=sys.stderr)
@@ -30,6 +30,7 @@ def log(msg):
 
 def err_log(msg):
     print(f"ERROR LOG:  {msg}", file=sys.stderr)
+
 
 def pkg_id_to_name(pkg_id):
     pkg_name = pkg_id.rsplit("-",2)[0]
@@ -52,6 +53,7 @@ def size(num, suffix='B'):
 def workload_id_to_conf_id(workload_id):
     workload_conf_id = workload_id.split(":")[0]
     return workload_conf_id
+
 
 def url_to_id(url):
 

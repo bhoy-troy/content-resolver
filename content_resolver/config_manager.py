@@ -14,7 +14,6 @@ class ConfigManager:
         else:
             self.settings = self.load_settings()
 
-
     def load_settings(self):
         settings = {}
 
@@ -46,10 +45,6 @@ class ConfigManager:
 
         return settings
 
-
-
-
-
     ###############################################################################
     ### Loading user-provided configs #############################################
     ###############################################################################
@@ -64,7 +59,6 @@ class ConfigManager:
 
     def _load_config_repo(self, document_id, document):
         raise NotImplementedError("Repo v1 is not supported. Please migrate to repo v2.")
-
 
     def _load_config_repo_v2(self, document_id, document, settings):
         config = {}
@@ -138,7 +132,6 @@ class ConfigManager:
 
         return config
 
-
     def _load_config_env(self, document_id, document, settings):
         config = {}
         config["id"] = document_id
@@ -159,14 +152,14 @@ class ConfigManager:
             config["repositories"] = []
             for repo in document["data"]["repositories"]:
                 config["repositories"].append(str(repo))
-            
+
             # Packages defining this environment.
             # This list includes packages for all
             # architectures — that's the one to use by default.
             config["packages"] = []
             for pkg in document["data"]["packages"]:
                 config["packages"].append(str(pkg))
-            
+
             # Labels connect things together.
             # Workloads get installed in environments with the same label.
             # They also get included in views with the same label.
@@ -191,7 +184,7 @@ class ConfigManager:
                 for pkg_raw in pkgs:
                     pkg = str(pkg_raw)
                     config["arch_packages"][arch].append(pkg)
-        
+
         # Extra installation options.
         # The following are now supported:
         # - "include-docs" - include documentation packages
@@ -202,7 +195,7 @@ class ConfigManager:
                 config["options"].append("include-docs")
             if "include-weak-deps" in document["data"]["options"]:
                 config["options"].append("include-weak-deps")
-        
+
         # Comps groups
         config["groups"] = []
         if "groups" in document["data"]:
@@ -210,7 +203,6 @@ class ConfigManager:
                 config["groups"].append(module)
 
         return config
-
 
     def _load_config_workload(self, document_id, document, settings):
         config = {}
@@ -244,7 +236,7 @@ class ConfigManager:
             # Who maintains it? This is just a freeform string
             # for humans to read. In Fedora, a FAS nick is recommended.
             config["maintainer"] = str(document["data"]["maintainer"])
-            
+
             # Labels connect things together.
             # Workloads get installed in environments with the same label.
             # They also get included in views with the same label.
@@ -285,7 +277,7 @@ class ConfigManager:
                         config["arch_packages"][arch].append(pkg)
                 except TypeError:
                     log(f"  Warning: {document_id} has an empty 'arch_packages/{arch}' field defined which is invalid. Moving on...")
-        
+
         # Extra installation options.
         # The following are now supported:
         # - "include-docs" - include documentation packages
@@ -298,8 +290,7 @@ class ConfigManager:
                 config["options"].append("include-weak-deps")
             if "strict" in document["data"]["options"]:
                 config["options"].append("strict")
-        
-        
+
         # Comps groups
         config["groups"] = []
         if "groups" in document["data"]:
@@ -333,17 +324,17 @@ class ConfigManager:
                         rpm_name = rpm.get("rpm_name", None)
                         if not rpm_name:
                             continue
-                        
+
                         description = rpm.get("description", "Description not provided.")
                         dependencies = rpm.get("dependencies", [])
                         rpm_limit_arches = rpm.get("limit_arches", [])
 
                         if limit_arches and rpm_limit_arches:
                             rpm_limit_arches = list(set(limit_arches) & set(rpm_limit_arches))
-                        
+
                         elif limit_arches and not rpm_limit_arches:
                             rpm_limit_arches = limit_arches
-                        
+
                         all_rpm_arches.update(rpm_limit_arches)
 
                         config["package_placeholders"]["pkgs"][rpm_name] = {}
@@ -352,14 +343,11 @@ class ConfigManager:
                         config["package_placeholders"]["pkgs"][rpm_name]["requires"] = dependencies
                         config["package_placeholders"]["pkgs"][rpm_name]["limit_arches"] = rpm_limit_arches
                         config["package_placeholders"]["pkgs"][rpm_name]["srpm"] = srpm_name
-                    
+
                     if not limit_arches and all_rpm_arches:
                         config["package_placeholders"]["srpms"][srpm_name]["limit_arches"] = list(all_rpm_arches)
 
-
-
         return config
-
 
     def _load_config_label(self, document_id, document, settings):
         config = {}
@@ -384,7 +372,6 @@ class ConfigManager:
         # none here
 
         return config
-
 
     def _load_config_compose_view(self, document_id, document, settings):
         config = {}
@@ -423,7 +410,7 @@ class ConfigManager:
         if "buildroot_strategy" in document["data"]:
             if str(document["data"]["buildroot_strategy"]) in ["none", "root_logs"]:
                 config["buildroot_strategy"] = str(document["data"]["buildroot_strategy"])
-        
+
         # Limit this view only to the following architectures
         config["architectures"] = []
         if "architectures" in document["data"]:
@@ -431,7 +418,7 @@ class ConfigManager:
                 config["architectures"].append(str(arch))
         if not len(config["architectures"]):
             config["architectures"] = settings["allowed_arches"]
-        
+
         # Packages to be flagged as unwanted
         config["unwanted_packages"] = []
         if "unwanted_packages" in document["data"]:
@@ -450,7 +437,7 @@ class ConfigManager:
                 for pkg_raw in pkgs:
                     pkg = str(pkg_raw)
                     config["unwanted_arch_packages"][arch].append(pkg)
-        
+
         # SRPMs (components) to be flagged as unwanted
         config["unwanted_source_packages"] = []
         if "unwanted_source_packages" in document["data"]:
@@ -458,7 +445,6 @@ class ConfigManager:
                 config["unwanted_source_packages"].append(str(pkg))
 
         return config
-
 
     def _load_config_addon_view(self, document_id, document, settings):
         config = {}
@@ -490,7 +476,7 @@ class ConfigManager:
 
         except KeyError:
             raise ConfigError(f"'{document_id}.yaml' - There's something wrong with the mandatory fields. Sorry I don't have more specific info.")
-        
+
         # Step 2: Optional fields
 
         # Packages to be flagged as unwanted
@@ -511,17 +497,14 @@ class ConfigManager:
                 for pkg_raw in pkgs:
                     pkg = str(pkg_raw)
                     config["unwanted_arch_packages"][arch].append(pkg)
-        
+
         # SRPMs (components) to be flagged as unwanted
         config["unwanted_source_packages"] = []
         if "unwanted_source_packages" in document["data"]:
             for pkg in document["data"]["unwanted_source_packages"]:
                 config["unwanted_source_packages"].append(str(pkg))
 
-
-
         return config
-
 
     def _load_config_unwanted(self, document_id, document, settings):
         config = {}
@@ -560,10 +543,10 @@ class ConfigManager:
             config["labels"] = []
             for repo in document["data"]["labels"]:
                 config["labels"].append(str(repo))
-        
+
         except KeyError:
             raise ConfigError(f"'{document_id}.yaml' - There's something wrong with the mandatory fields. Sorry I don't have more specific info.")
-        
+
         # Step 2: Optional fields
 
         # Packages to be flagged as unwanted
@@ -584,7 +567,7 @@ class ConfigManager:
                 for pkg_raw in pkgs:
                     pkg = str(pkg_raw)
                     config["unwanted_arch_packages"][arch].append(pkg)
-        
+
         # SRPMs (components) to be flagged as unwanted
         config["unwanted_source_packages"] = []
         if "unwanted_source_packages" in document["data"]:
@@ -604,7 +587,6 @@ class ConfigManager:
                     pkg = str(pkg_raw)
                     config["unwanted_arch_source_packages"][arch].append(pkg)
         return config
-
 
     def _load_config_buildroot(self, document_id, document, settings):
         config = {}
@@ -655,12 +637,11 @@ class ConfigManager:
                         except TypeError:
                             log(f"  Warning: {document_id} has an empty 'requires' field defined which is invalid. Moving on...")
                             continue
-                    
+
                     config["source_packages"][arch][str(srpm_name)] = {}
                     config["source_packages"][arch][str(srpm_name)]["requires"] = requires
 
         return config
-
 
     def _load_json_data_buildroot_pkg_relations(self, document_id, document, settings):
         config = {}
@@ -678,12 +659,11 @@ class ConfigManager:
 
             #pkg_relations
             config["pkg_relations"] = document["data"]["pkgs"]
-            
+
         except KeyError:
             raise ConfigError(f"'{document_id}.yaml' - There's something wrong with the mandatory fields. Sorry I don't have more specific info.")
-        
-        return config
 
+        return config
 
     def filter_configs_by_labels(self, configs, selected_label_ids):
         """
@@ -789,7 +769,7 @@ class ConfigManager:
         if "allowed_arches" not in self.settings:
             err_log("System error: allowed_arches not configured")
             raise SettingsError
-        
+
         if not self.settings["allowed_arches"]:
             err_log("System error: no allowed_arches not configured")
             raise SettingsError
@@ -805,7 +785,6 @@ class ConfigManager:
         configs["buildroots"] = {}
         configs["buildroot_pkg_relations"] = {}
 
-
         # Step 1: Load all configs
         serious_error_messages = set()
         log("Loading yaml files...")
@@ -814,7 +793,7 @@ class ConfigManager:
             # Only accept yaml files
             if not yml_file.endswith(".yaml"):
                 continue
-            
+
             document_id = yml_file.split(".yaml")[0]
 
             try:
@@ -824,7 +803,7 @@ class ConfigManager:
                         document = yaml.safe_load(file)
                     except yaml.YAMLError as err:
                         raise ConfigError(f"Error loading a config '{yml_file}': {err}") from err
-                    
+
                     # Only accept yaml files stating their purpose!
                     if not ("document" in document and "version" in document):
                         raise ConfigError(f"'{yml_file}.yaml' - doesn't specify the 'document' and/or the 'version' field.")
@@ -856,7 +835,7 @@ class ConfigManager:
                     if document["document"] in ["content-resolver-repository", "feedback-pipeline-repository"]:
                         if document["version"] == 1:
                             configs["repos"][document_id] = self._load_config_repo(document_id, document, self.settings)
-                        
+
                         elif document["version"] == 2:
                             configs["repos"][document_id] = self._load_config_repo_v2(document_id, document, self.settings)
 
@@ -867,7 +846,7 @@ class ConfigManager:
                     # === Case: Workload config ===
                     if document["document"] in ["content-resolver-workload", "feedback-pipeline-workload"]:
                         configs["workloads"][document_id] = self._load_config_workload(document_id, document, self.settings)
-                    
+
                     # === Case: Label config ===
                     if document["document"] in ["content-resolver-label", "feedback-pipeline-label"]:
                         configs["labels"][document_id] = self._load_config_label(document_id, document, self.settings)
@@ -910,11 +889,11 @@ class ConfigManager:
             log("")
             log("  ✅ No serious errors found.")
             log("")
-        
+
         log("  Done!")
         log("")
         log("")
-        
+
         # Step 1.5: Load all external data sources
         serious_error_messages = set()
         log("Loading json files...")
@@ -924,7 +903,7 @@ class ConfigManager:
             # Only accept json files
             if not json_file.endswith(".json"):
                 continue
-            
+
             document_id = json_file.split(".json")[0]
 
             try:
@@ -932,7 +911,7 @@ class ConfigManager:
                     json_data = self.load_data(os.path.join(directory, json_file))
                 except Exception as err:
                     raise ConfigError(f"Error loading a JSON data file '{json_file}': {err}") from err
-                
+
                 # Only accept json files stating their purpose!
                 if not ("document_type" in json_data and "version" in json_data):
                     raise ConfigError(f"'{json_file}.yaml' - doesn't specify the 'document' and/or the 'version' field.")
@@ -945,7 +924,7 @@ class ConfigManager:
             except ConfigError as err:
                 serious_error_messages.add(str(err))
                 continue
-        
+
         if serious_error_messages:
             log("")
             log("  -------------------------------------------------------------------------")
@@ -963,12 +942,9 @@ class ConfigManager:
             log("  ✅ No serious errors found.")
             log("")
 
-            
         log("  Done!")
         log("")
         log("")
-
-
 
         # Step 2: cross check configs for references and other validation
         #
@@ -997,17 +973,16 @@ class ConfigManager:
                 if base_view_id not in configs["views"]:
                     log(f"   Addon view {view_conf_id} is referencing a non-existing base_view_id. Removing it.")
                     del configs["views"][view_conf_id]
-        
+
                 else:
                     base_view = configs["views"][base_view_id]
                     if base_view["type"] != "compose":
                         log(f"   Addon view {view_conf_id} is referencing an addon base_view_id, which is not supported. Removing it.")
                         del configs["views"][view_conf_id]
 
-                
                 # Ading some extra fields onto the addon view
                 configs["views"][view_conf_id]["architectures"] = configs["views"][base_view_id]["architectures"]
-        
+
         # Adjust view architecture based on repository architectures
         for view_conf_id, view_conf in configs["views"].items():
             if view_conf["type"] == "compose":
@@ -1020,7 +995,7 @@ class ConfigManager:
                         actual_arches.add(arch)
                 view_conf["architectures"] = sorted(list(actual_arches))
 
-        # Adjust addon view architecture based on its base view architectures        
+        # Adjust addon view architecture based on its base view architectures
         for view_conf_id, view_conf in configs["views"].items():
             if view_conf["type"] == "addon":
                 if not len(view_conf["architectures"]):
@@ -1031,9 +1006,8 @@ class ConfigManager:
                     if arch in configs["views"][base_view_id]["architectures"]:
                         actual_arches.add(arch)
                 view_conf["architectures"] = sorted(list(actual_arches))
-        
-        # FIXME: Check other configs, too!
 
+        # FIXME: Check other configs, too!
 
         log("")
         log("  ✅ No serious errors found.")
@@ -1065,7 +1039,5 @@ class ConfigManager:
         log(f"  - {len(configs['workloads'])} workloads")
         log(f"  - {len(configs['unwanteds'])} exclusion lists")
         log("")
-
-
 
         return configs

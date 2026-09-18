@@ -41,7 +41,7 @@ def _save_current_historic_data(query):
         workload_history["pkg_count"] = len(query.workload_pkgs_id(workload_id))
 
         history_data["workloads"][workload_id] = workload_history
-    
+
     # Environments
     for env_id in query.envs(None,None,None,list_all=True):
         env = query.data["envs"][env_id]
@@ -60,12 +60,11 @@ def _save_current_historic_data(query):
         history_data["repos"][repo_id] = {}
 
         for arch, pkgs in query.data["pkgs"][repo_id].items():
-
             repo_history = {}
             repo_history["pkg_count"] = len(pkgs)
-            
+
             history_data["repos"][repo_id][arch] = repo_history
-    
+
     # Views (new)
     for view_conf_id, view_conf in query.configs["views"].items():
         view_all_arches = query.data["views_all_arches"][view_conf_id]
@@ -127,7 +126,6 @@ def _generate_chartjs_data(historic_data, query):
 
     # Data for workload pages
     for workload_id in query.workloads(None, None, None, None, list_all=True):
-
         entry_data = {}
 
         # First, get the dates as chart labels
@@ -162,11 +160,10 @@ def _generate_chartjs_data(historic_data, query):
 
         entry_name = f"chartjs-data--workload--{workload_id}"
         _generate_json_file(entry_data, entry_name, query.settings)
-    
+
     # Data for workload overview pages
     for workload_conf_id in query.workloads(None,None,None,None,output_change="workload_conf_ids"):
         for repo_id in query.workloads(workload_conf_id,None,None,None,output_change="repo_ids"):
-
             entry_data = {}
 
             # First, get the dates as chart labels
@@ -179,7 +176,6 @@ def _generate_chartjs_data(historic_data, query):
             entry_data["datasets"] = []
 
             for workload_id in query.workloads(workload_conf_id, None, repo_id, None, list_all=True):
-
                 workload = query.data["workloads"][workload_id]
                 env_conf_id = workload["env_conf_id"]
                 env_conf = query.configs["envs"][env_conf_id]
@@ -188,7 +184,6 @@ def _generate_chartjs_data(historic_data, query):
                 dataset["data"] = []
                 dataset["label"] = f"in {env_conf['name']} {workload['arch']}"
                 dataset["fill"] = "false"
-
 
                 for _,entry in historic_data.items():
                     try:
@@ -204,12 +199,11 @@ def _generate_chartjs_data(historic_data, query):
 
             entry_name = f"chartjs-data--workload-overview--{workload_conf_id}--{repo_id}"
             _generate_json_file(entry_data, entry_name, query.settings)
-    
+
     # Data for workload cmp arches pages
     for workload_conf_id in query.workloads(None,None,None,None,output_change="workload_conf_ids"):
         for env_conf_id in query.workloads(workload_conf_id,None,None,None,output_change="env_conf_ids"):
             for repo_id in query.workloads(workload_conf_id,env_conf_id,None,None,output_change="repo_ids"):
-
                 workload_conf = query.configs["workloads"][workload_conf_id]
                 env_conf = query.configs["envs"][env_conf_id]
                 repo = query.configs["repos"][repo_id]
@@ -226,7 +220,6 @@ def _generate_chartjs_data(historic_data, query):
                 entry_data["datasets"] = []
 
                 for workload_id in query.workloads(workload_conf_id,env_conf_id,repo_id,None,list_all=True):
-
                     workload = query.data["workloads"][workload_id]
                     env_conf_id = workload["env_conf_id"]
                     env_conf = query.configs["envs"][env_conf_id]
@@ -250,12 +243,11 @@ def _generate_chartjs_data(historic_data, query):
 
                 entry_name = f"chartjs-data--workload-cmp-arches--{workload_conf_id}--{env_conf_id}--{repo_id}"
                 _generate_json_file(entry_data, entry_name, query.settings)
-    
+
     # Data for workload cmp envs pages
     for workload_conf_id in query.workloads(None,None,None,None,output_change="workload_conf_ids"):
         for repo_id in query.workloads(workload_conf_id,None,None,None,output_change="repo_ids"):
             for arch in query.workloads(workload_conf_id,None,repo_id,None,output_change="arches"):
-
                 workload_conf = query.configs["workloads"][workload_conf_id]
                 env_conf = query.configs["envs"][env_conf_id]
                 repo = query.configs["repos"][repo_id]
@@ -272,7 +264,6 @@ def _generate_chartjs_data(historic_data, query):
                 entry_data["datasets"] = []
 
                 for workload_id in query.workloads(workload_conf_id,None,repo_id,arch,list_all=True):
-
                     workload = query.data["workloads"][workload_id]
                     repo = query.configs["repos"][repo_id]
 
@@ -295,10 +286,9 @@ def _generate_chartjs_data(historic_data, query):
 
                 entry_name = f"chartjs-data--workload-cmp-envs--{workload_conf_id}--{repo_id}--{arch}"
                 _generate_json_file(entry_data, entry_name, query.settings)
-    
+
     # Data for env pages
     for env_id in query.envs(None, None, None, list_all=True):
-
         entry_data = {}
 
         # First, get the dates as chart labels
@@ -334,11 +324,10 @@ def _generate_chartjs_data(historic_data, query):
 
         entry_name = f"chartjs-data--env--{env_id}"
         _generate_json_file(entry_data, entry_name, query.settings)
-    
+
     # Data for env overview pages
     for env_conf_id in query.envs(None,None,None,output_change="env_conf_ids"):
         for repo_id in query.envs(env_conf_id,None,None,output_change="repo_ids"):
-
             entry_data = {}
 
             # First, get the dates as chart labels
@@ -351,7 +340,6 @@ def _generate_chartjs_data(historic_data, query):
             entry_data["datasets"] = []
 
             for env_id in query.envs(env_conf_id, repo_id, None, list_all=True):
-
                 env = query.data["envs"][env_id]
                 env_conf_id = env["env_conf_id"]
                 env_conf = query.configs["envs"][env_conf_id]
@@ -360,7 +348,6 @@ def _generate_chartjs_data(historic_data, query):
                 dataset["data"] = []
                 dataset["label"] = f"in {env_conf['name']} {env['arch']}"
                 dataset["fill"] = "false"
-
 
                 for _,entry in historic_data.items():
                     try:
@@ -376,11 +363,10 @@ def _generate_chartjs_data(historic_data, query):
 
             entry_name = f"chartjs-data--env-overview--{env_conf_id}--{repo_id}"
             _generate_json_file(entry_data, entry_name, query.settings)
-    
+
     # Data for env cmp arches pages
     for env_conf_id in query.envs(None,None,None,output_change="env_conf_ids"):
         for repo_id in query.envs(env_conf_id,None,None,output_change="repo_ids"):
-
             env_conf = query.configs["envs"][env_conf_id]
             env_conf = query.configs["envs"][env_conf_id]
             repo = query.configs["repos"][repo_id]
@@ -397,7 +383,6 @@ def _generate_chartjs_data(historic_data, query):
             entry_data["datasets"] = []
 
             for env_id in query.envs(env_conf_id,repo_id,None,list_all=True):
-
                 env = query.data["envs"][env_id]
 
                 dataset = {}
@@ -419,8 +404,8 @@ def _generate_chartjs_data(historic_data, query):
 
             entry_name = f"chartjs-data--env-cmp-arches--{env_conf_id}--{repo_id}"
             _generate_json_file(entry_data, entry_name, query.settings)
-    
-    # Data for view pages 
+
+    # Data for view pages
     for view_conf_id in query.configs["views"].keys():
         view_all_arches = query.data["views_all_arches"][view_conf_id]
 

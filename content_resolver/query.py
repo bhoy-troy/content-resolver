@@ -23,7 +23,6 @@ class Query():
                 return f"{num:3.1f} {unit}{suffix}"
             num /= 1024.0
         return f"{num:.1f} T{suffix}"
-        
 
     @lru_cache(maxsize = None)
     def workloads(self, workload_conf_id, env_conf_id, repo_id, arch, list_all=False, output_change=None):
@@ -49,19 +48,19 @@ class Query():
             env_conf_ids = [env_conf_id]
         else:
             env_conf_ids = self.configs["envs"].keys()
-        
+
         # list considered repo_ids
         if repo_id:
             repo_ids = [repo_id]
         else:
             repo_ids = self.configs["repos"].keys()
-            
+
         # list considered arches
         if arch:
             arches = [arch]
         else:
             arches = self.settings["allowed_arches"]
-        
+
         # And now try looping through all of that, and return True on a first occurance
         # This is a terrible amount of loops. But most cases will have just one item
         # in most of those, anyway. No one is expected to run this method with
@@ -85,7 +84,7 @@ class Query():
                                     matching_ids.add(arch)
                             else:
                                 matching_ids.add(workload_id)
-        
+
         if not list_all:
             return False
         return sorted(list(matching_ids))
@@ -101,7 +100,7 @@ class Query():
             repo_id = id_components[1]
             arch = id_components[2]
             return self.workloads(None, env_conf_id, repo_id, arch, list_all, output_change)
-        
+
         # It's a workload! Why would you want that, anyway?!
         if len(id_components) == 4:
             workload_conf_id = id_components[0]
@@ -109,7 +108,7 @@ class Query():
             repo_id = id_components[2]
             arch = id_components[3]
             return self.workloads(workload_conf_id, env_conf_id, repo_id, arch, list_all, output_change)
-        
+
         raise ValueError("That seems to be an invalid ID!")
 
     @lru_cache(maxsize = None)
@@ -122,7 +121,7 @@ class Query():
             list_all = True
             if output_change not in ["env_conf_ids", "repo_ids", "arches"]:
                 raise ValueError('output_change must be one of: "env_conf_ids", "repo_ids", "arches"')
-        
+
         matching_ids = set()
 
         # list considered env_conf_ids
@@ -130,19 +129,19 @@ class Query():
             env_conf_ids = [env_conf_id]
         else:
             env_conf_ids = self.configs["envs"].keys()
-        
+
         # list considered repo_ids
         if repo_id:
             repo_ids = [repo_id]
         else:
             repo_ids = self.configs["repos"].keys()
-            
+
         # list considered arches
         if arch:
             arches = [arch]
         else:
             arches = self.settings["allowed_arches"]
-        
+
         # And now try looping through all of that, and return True on a first occurance
         # This is a terrible amount of loops. But most cases will have just one item
         # in most of those, anyway. No one is expected to run this method with
@@ -163,7 +162,7 @@ class Query():
                                 matching_ids.add(arch)
                         else:
                             matching_ids.add(env_id)
-        
+
         # This means nothing has been found!
         if not list_all:
             return False
@@ -180,7 +179,7 @@ class Query():
             repo_id = id_components[1]
             arch = id_components[2]
             return self.envs(env_conf_id, repo_id, arch, list_all, output_change)
-        
+
         # It's a workload!
         if len(id_components) == 4:
             workload_conf_id = id_components[0]
@@ -188,9 +187,9 @@ class Query():
             repo_id = id_components[2]
             arch = id_components[3]
             return self.envs(env_conf_id, repo_id, arch, list_all, output_change)
-        
+
         raise ValueError("That seems to be an invalid ID!")
-    
+
     @lru_cache(maxsize = None)
     def workload_pkgs(self, workload_conf_id, env_conf_id, repo_id, arch, output_change=None):
         # Warning: mixing repos and arches works, but might cause mess on the output
@@ -210,7 +209,7 @@ class Query():
             list_all = True
             if output_change not in ["ids", "binary_names", "source_nvr", "source_names"]:
                 raise ValueError('output_change must be one of: "ids", "binary_names", "source_nvr", "source_names"')
-        
+
         # Step 1: get all the matching workloads!
         workload_ids = self.workloads(workload_conf_id, env_conf_id, repo_id, arch, list_all=True)
 
@@ -237,7 +236,6 @@ class Query():
 
             # First, get all pkgs in the env
             for pkg_id in workload["pkg_env_ids"]:
-
                 # Add it to the list if it's not there already.
                 # Create a copy since it's gonna be modified, and include only what's needed
                 pkg = self.data["pkgs"][workload_repo_id][workload_arch][pkg_id]
@@ -255,7 +253,7 @@ class Query():
                     pkgs[workload_repo_id][workload_arch][pkg_id]["q_in"] = set()
                     pkgs[workload_repo_id][workload_arch][pkg_id]["q_required_in"] = set()
                     pkgs[workload_repo_id][workload_arch][pkg_id]["q_env_in"] = set()
-                
+
                 # It's here, so add it
                 pkgs[workload_repo_id][workload_arch][pkg_id]["q_in"].add(workload_id)
                 # Browsing env packages, so add it
@@ -265,10 +263,9 @@ class Query():
                     pkgs[workload_repo_id][workload_arch][pkg_id]["q_required_in"].add(workload_id)
                 if pkg["name"] in self.configs["workloads"][workload_conf_id]["arch_packages"][workload_arch]:
                     pkgs[workload_repo_id][workload_arch][pkg_id]["q_required_in"].add(workload_id)
-            
+
             # Second, add all the other packages
             for pkg_id in workload["pkg_added_ids"]:
-
                 # Add it to the list if it's not there already
                 # and initialize extra fields
                 pkg = self.data["pkgs"][workload_repo_id][workload_arch][pkg_id]
@@ -286,7 +283,7 @@ class Query():
                     pkgs[workload_repo_id][workload_arch][pkg_id]["q_in"] = set()
                     pkgs[workload_repo_id][workload_arch][pkg_id]["q_required_in"] = set()
                     pkgs[workload_repo_id][workload_arch][pkg_id]["q_env_in"] = set()
-                
+
                 # It's here, so add it
                 pkgs[workload_repo_id][workload_arch][pkg_id]["q_in"].add(workload_id)
                 # Not adding it to q_env_in
@@ -295,7 +292,7 @@ class Query():
                     pkgs[workload_repo_id][workload_arch][pkg_id]["q_required_in"].add(workload_id)
                 if pkg["name"] in self.configs["workloads"][workload_conf_id]["arch_packages"][workload_arch]:
                     pkgs[workload_repo_id][workload_arch][pkg_id]["q_required_in"].add(workload_id)
-            
+
             # Third, add package placeholders if any
             for placeholder_id in workload["pkg_placeholder_ids"]:
                 placeholder = workload_conf["package_placeholders"]["pkgs"][pkg_id_to_name(placeholder_id)]
@@ -333,10 +330,9 @@ class Query():
                             pkg_names.add(pkg["sourcerpm"])
                         elif output_change == "source_names":
                             pkg_names.add(pkg["source_name"])
-            
+
             names_sorted = sorted(list(pkg_names))
             return names_sorted
-                        
 
         # And now I just need to flatten that dict and return all packages as a list
         final_pkg_list = []
@@ -350,7 +346,6 @@ class Query():
 
         return final_pkg_list_sorted
 
-
     @lru_cache(maxsize = None)
     def workload_pkgs_id(self, id, output_change=None):
         # Accepts both env and workload ID, and returns pkgs for workloads that match
@@ -362,7 +357,7 @@ class Query():
             repo_id = id_components[1]
             arch = id_components[2]
             return self.workload_pkgs(None, env_conf_id, repo_id, arch, output_change)
-        
+
         # It's a workload!
         if len(id_components) == 4:
             workload_conf_id = id_components[0]
@@ -370,9 +365,9 @@ class Query():
             repo_id = id_components[2]
             arch = id_components[3]
             return self.workload_pkgs(workload_conf_id, env_conf_id, repo_id, arch, output_change)
-        
+
         raise ValueError("That seems to be an invalid ID!")
-    
+
     @lru_cache(maxsize = None)
     def env_pkgs(self, env_conf_id, repo_id, arch):
         # Warning: mixing repos and arches works, but might cause mess on the output
@@ -382,7 +377,6 @@ class Query():
         # q_required_in - set of env_ids where this pkg is required (top-level)
         # q_arch        - architecture
 
-        
         # Step 1: get all the matching envs!
         env_ids = self.envs(env_conf_id, repo_id, arch, list_all=True)
 
@@ -407,7 +401,6 @@ class Query():
             env_conf_id = env["env_conf_id"]
 
             for pkg_id in env["pkg_ids"]:
-
                 # Add it to the list if it's not there already.
                 # Create a copy since it's gonna be modified, and include only what's needed
                 pkg = self.data["pkgs"][env_repo_id][env_arch][pkg_id]
@@ -425,7 +418,7 @@ class Query():
                     pkgs[env_repo_id][env_arch][pkg_id]["q_arch"] = env_arch
                     pkgs[env_repo_id][env_arch][pkg_id]["q_in"] = set()
                     pkgs[env_repo_id][env_arch][pkg_id]["q_required_in"] = set()
-                
+
                 # It's here, so add it
                 pkgs[env_repo_id][env_arch][pkg_id]["q_in"].add(env_id)
                 # Is it required?
@@ -445,7 +438,7 @@ class Query():
         final_pkg_list_sorted = sorted(final_pkg_list, key=lambda k: k['id'])
 
         return final_pkg_list_sorted
-    
+
     @lru_cache(maxsize = None)
     def env_pkgs_id(self, id):
         # Accepts both env and workload ID, and returns pkgs for envs that match
@@ -457,7 +450,7 @@ class Query():
             repo_id = id_components[1]
             arch = id_components[2]
             return self.env_pkgs(env_conf_id, repo_id, arch)
-        
+
         # It's a workload!
         if len(id_components) == 4:
             workload_conf_id = id_components[0]
@@ -465,7 +458,7 @@ class Query():
             repo_id = id_components[2]
             arch = id_components[3]
             return self.env_pkgs(env_conf_id, repo_id, arch)
-        
+
         raise ValueError("That seems to be an invalid ID!")
 
     @lru_cache(maxsize = None)
@@ -497,7 +490,7 @@ class Query():
             repo_id = id_components[1]
             arch = id_components[2]
             return self.workload_size(None, env_conf_id, repo_id, arch)
-        
+
         # It's a workload!
         if len(id_components) == 4:
             workload_conf_id = id_components[0]
@@ -505,9 +498,9 @@ class Query():
             repo_id = id_components[2]
             arch = id_components[3]
             return self.workload_size(workload_conf_id, env_conf_id, repo_id, arch)
-        
+
         raise ValueError("That seems to be an invalid ID!")
-    
+
     @lru_cache(maxsize = None)
     def env_size_id(self, id):
         # Accepts both env and workload ID, and returns pkgs for envs that match
@@ -519,7 +512,7 @@ class Query():
             repo_id = id_components[1]
             arch = id_components[2]
             return self.env_size(env_conf_id, repo_id, arch)
-        
+
         # It's a workload!
         if len(id_components) == 4:
             workload_conf_id = id_components[0]
@@ -527,35 +520,35 @@ class Query():
             repo_id = id_components[2]
             arch = id_components[3]
             return self.env_size(env_conf_id, repo_id, arch)
-        
+
         raise ValueError("That seems to be an invalid ID!")
-    
+
     # TODO: these function have similar output,  create a re-usable helper function
 
     def workload_url_slug(self, workload_conf_id, env_conf_id, repo_id, arch):
         return f"{workload_conf_id}--{env_conf_id}--{repo_id}--{arch}"
-    
+
     def env_url_slug(self, env_conf_id, repo_id, arch):
         return f"{env_conf_id}--{repo_id}--{arch}"
 
     def workload_id_string(self, workload_conf_id, env_conf_id, repo_id, arch):
         return f"{workload_conf_id}:{env_conf_id}:{repo_id}:{arch}"
-    
+
     def env_id_string(self, env_conf_id, repo_id, arch):
         return f"{env_conf_id}:{repo_id}:{arch}"
-    
+
     def url_slug_id(self, any_id):
         return any_id.replace(":", "--")
-    
+
     @lru_cache(maxsize = None)
     def workloads_in_view(self, view_conf_id, arch, maintainer=None):
         view_conf = self.configs["views"][view_conf_id]
         repo_id = view_conf["repository"]
         labels = view_conf["labels"]
-        
+
         if arch and arch not in self.settings["allowed_arches"]:
             raise ValueError(f"Unsupported arch: {arch}")
-        
+
         if arch and arch not in self.arches_in_view(view_conf_id):
             return []
 
@@ -582,16 +575,16 @@ class Query():
                     final_workload_ids.add(workload_id)
 
         return sorted(list(final_workload_ids))
-    
+
     @lru_cache(maxsize = None)
     def arches_in_view(self, view_conf_id, maintainer=None):
 
         if len(self.configs["views"][view_conf_id]["architectures"]):
             arches = self.configs["views"][view_conf_id]["architectures"]
             return sorted(arches)
-        
+
         return self.settings["allowed_arches"]
-    
+
     @lru_cache(maxsize = None)
     def pkgs_in_view(self, view_conf_id, arch, output_change=None, maintainer=None):
 
@@ -600,7 +593,7 @@ class Query():
         # q_required_in - set of workload_ids where this pkg is required (top-level)
         # q_env_in      - set of workload_ids where this pkg is in env
         # q_dep_in      - set of workload_ids where this pkg is a dependency (that means not required)
-        # q_maintainers - set of workload maintainers 
+        # q_maintainers - set of workload maintainers
 
         # Other outputs:
         #   - "ids"         — a list of ids (NEVRA)
@@ -613,7 +606,6 @@ class Query():
             if output_change not in ["ids", "nevrs", "binary_names", "source_nvr", "source_names"]:
                 raise ValueError('output_change must be one of: "ids", "nevrs", "binary_names", "source_nvr", "source_names"')
 
-        
         # -----
         # Step 1: get all packages from all workloads in this view
         # -----
@@ -623,7 +615,7 @@ class Query():
 
         # This has just one repo and one arch, so a flat list of IDs is enough
         pkgs = {}
-        
+
         for workload_id in workload_ids:
             workload = self.data["workloads"][workload_id]
             workload_conf_id = workload["workload_conf_id"]
@@ -651,7 +643,7 @@ class Query():
                     pkgs[pkg_id]["q_dep_in"] = set()
                     pkgs[pkg_id]["q_env_in"] = set()
                     pkgs[pkg_id]["q_maintainers"] = set()
-                
+
                 # It's here, so add it
                 pkgs[pkg_id]["q_in"].add(workload_id)
                 # Browsing env packages, so add it
@@ -685,7 +677,7 @@ class Query():
                     pkgs[pkg_id]["q_dep_in"] = set()
                     pkgs[pkg_id]["q_env_in"] = set()
                     pkgs[pkg_id]["q_maintainers"] = set()
-                
+
                 # It's here, so add it
                 pkgs[pkg_id]["q_in"].add(workload_id)
                 # Not adding it to q_env_in
@@ -719,7 +711,7 @@ class Query():
                     pkgs[placeholder_id]["q_dep_in"] = set()
                     pkgs[placeholder_id]["q_env_in"] = set()
                     pkgs[placeholder_id]["q_maintainers"] = set()
-                
+
                 # It's here, so add it
                 pkgs[placeholder_id]["q_in"].add(workload_id)
                 # All placeholders are required
@@ -727,7 +719,6 @@ class Query():
                 # Maintainer
                 pkgs[placeholder_id]["q_maintainers"].add(workload_conf["maintainer"])
 
-        
         # -----
         # Step 2: narrow the package list down based on various criteria
         # -----
@@ -745,7 +736,6 @@ class Query():
                 if base_pkg_id in pkgs:
                     del pkgs[base_pkg_id]
 
-
         # Filtering by a maintainer?
         # Filter out packages not belonging to the maintainer
         # It's filtered out at this stage to keep the context of fields like
@@ -758,8 +748,6 @@ class Query():
         for pkg_id in pkg_ids_to_delete:
             del pkgs[pkg_id]
 
-        
-                
         # -----
         # Step 3: Make the output to be the right format
         # -----
@@ -778,10 +766,9 @@ class Query():
                     pkg_names.add(pkg["sourcerpm"])
                 elif output_change == "source_names":
                     pkg_names.add(pkg["source_name"])
-            
+
             names_sorted = sorted(list(pkg_names))
             return names_sorted
-                        
 
         # And now I just need to flatten that dict and return all packages as a list
         final_pkg_list = []
@@ -792,7 +779,6 @@ class Query():
         final_pkg_list_sorted = sorted(final_pkg_list, key=lambda k: k['id'])
 
         return final_pkg_list_sorted
-    
 
     @lru_cache(maxsize = None)
     def view_buildroot_pkgs(self, view_conf_id, arch, output_change=None, maintainer=None):
@@ -841,17 +827,15 @@ class Query():
 
             if arch != buildroot_pkg_relations_conf["arch"]:
                 continue
-        
+
             buildroot_pkg_relations = buildroot_pkg_relations_conf["pkg_relations"]
 
             for this_pkg_id in buildroot_pkg_relations:
                 this_pkg_name = pkg_id_to_name(this_pkg_id)
 
                 if this_pkg_name in pkgs:
-
                     if this_pkg_id in buildroot_pkg_relations and not pkgs[this_pkg_name]["srpm_name"]:
                         pkgs[this_pkg_name]["srpm_name"] = buildroot_pkg_relations[this_pkg_id]["source_name"]
-
 
         if output_change == "source_names":
             srpms = set()
@@ -862,10 +846,9 @@ class Query():
 
             srpm_names_sorted = sorted(list(srpms))
             return srpm_names_sorted
-        
+
         return pkgs
-    
-    
+
     @lru_cache(maxsize = None)
     def workload_succeeded(self, workload_conf_id, env_conf_id, repo_id, arch):
         workload_ids = self.workloads(workload_conf_id, env_conf_id, repo_id, arch, list_all=True)
@@ -875,7 +858,7 @@ class Query():
             if not workload["succeeded"]:
                 return False
         return True
-    
+
     @lru_cache(maxsize = None)
     def workload_warnings(self, workload_conf_id, env_conf_id, repo_id, arch):
         workload_ids = self.workloads(workload_conf_id, env_conf_id, repo_id, arch, list_all=True)
@@ -885,7 +868,7 @@ class Query():
             if workload["warnings"]["message"]:
                 return True
         return False
-    
+
     @lru_cache(maxsize = None)
     def env_succeeded(self, env_conf_id, repo_id, arch):
         env_ids = self.envs(env_conf_id, repo_id, arch, list_all=True)
@@ -895,7 +878,7 @@ class Query():
             if not env["succeeded"]:
                 return False
         return True
-    
+
     @lru_cache(maxsize = None)
     def view_succeeded(self, view_conf_id, arch, maintainer=None):
         workload_ids = self.workloads_in_view(view_conf_id, arch)
@@ -913,7 +896,6 @@ class Query():
             if not workload["succeeded"]:
                 return False
         return True
-    
 
     def _srpm_name_to_rpm_names(self, srpm_name, repo_id):
         all_pkgs_by_arch = self.data["pkgs"][repo_id]
@@ -927,7 +909,6 @@ class Query():
 
         return pkg_names
 
-    
     @lru_cache(maxsize = None)
     def view_unwanted_pkgs(self, view_conf_id, arch, output_change=None, maintainer=None):
 
@@ -938,9 +919,8 @@ class Query():
         if output_change:
             if output_change not in output_lists:
                 raise ValueError('output_change must be one of: "source_names"')
-        
-            output_lists = output_change
 
+            output_lists = output_change
 
         view_conf = self.configs["views"][view_conf_id]
         repo_id = view_conf["repository"]
@@ -956,7 +936,7 @@ class Query():
                 for unwanted_label in unwanted["labels"]:
                     if view_label == unwanted_label:
                         unwanted_ids.add(unwanted_id)
-        
+
         # This will be the package list
         unwanted_pkg_names = {}
 
@@ -979,17 +959,16 @@ class Query():
                     for pkg_name in view_conf["unwanted_arch_packages"][arch]:
                         if pkg_name in unwanted_pkg_names:
                             continue
-                        
+
                         pkg = {}
                         pkg["name"] = pkg_name
                         pkg["unwanted_in_view"] = True
                         pkg["unwanted_list_ids"] = []
 
                         unwanted_pkg_names[pkg_name] = pkg
-                
+
                 for pkg_source_name in view_conf["unwanted_source_packages"]:
                     for pkg_name in self._srpm_name_to_rpm_names(pkg_source_name, repo_id):
-                        
                         if pkg_name in unwanted_pkg_names:
                             continue
 
@@ -999,7 +978,6 @@ class Query():
                         pkg["unwanted_list_ids"] = []
 
                         unwanted_pkg_names[pkg_name] = pkg
-
 
         ### Step 2: Get packages from the various exclusion lists (unwanted proposal)
         if "unwanted_proposals" in output_lists:
@@ -1010,34 +988,33 @@ class Query():
                     if pkg_name in unwanted_pkg_names:
                         unwanted_pkg_names[pkg_name]["unwanted_list_ids"].append(unwanted_id)
                         continue
-                    
+
                     pkg = {}
                     pkg["name"] = pkg_name
                     pkg["unwanted_in_view"] = False
                     pkg["unwanted_list_ids"] = [unwanted_id]
 
                     unwanted_pkg_names[pkg_name] = pkg
-            
+
                 for arch in arches:
                     for pkg_name in unwanted_conf["unwanted_arch_packages"][arch]:
                         if pkg_name in unwanted_pkg_names:
                             unwanted_pkg_names[pkg_name]["unwanted_list_ids"].append(unwanted_id)
                             continue
-                        
+
                         pkg = {}
                         pkg["name"] = pkg_name
                         pkg["unwanted_in_view"] = True
                         pkg["unwanted_list_ids"] = []
 
                         unwanted_pkg_names[pkg_name] = pkg
-                
+
                 for pkg_source_name in unwanted_conf["unwanted_source_packages"]:
                     for pkg_name in self._srpm_name_to_rpm_names(pkg_source_name, repo_id):
-
                         if pkg_name in unwanted_pkg_names:
                             unwanted_pkg_names[pkg_name]["unwanted_list_ids"].append(unwanted_id)
                             continue
-                        
+
                         pkg = {}
                         pkg["name"] = pkg_name
                         pkg["unwanted_in_view"] = False
@@ -1045,10 +1022,7 @@ class Query():
 
                         unwanted_pkg_names[pkg_name] = pkg
 
-        #self.cache["view_unwanted_pkgs"][view_conf_id][arch] = unwanted_pkg_names
-
         return unwanted_pkg_names
-
 
     @lru_cache(maxsize = None)
     def view_placeholder_srpms(self, view_conf_id, arch):
@@ -1058,11 +1032,6 @@ class Query():
         workload_ids = self.workloads_in_view(view_conf_id, arch)
 
         placeholder_srpms = {}
-        # {
-        #    "SRPM_NAME": {
-        #        "build_requires": set() 
-        #    } 
-        # } 
 
         for workload_id in workload_ids:
             workload = self.data["workloads"][workload_id]
@@ -1083,11 +1052,10 @@ class Query():
                 if srpm_name not in placeholder_srpms:
                     placeholder_srpms[srpm_name] = {}
                     placeholder_srpms[srpm_name]["build_requires"] = set()
-                
-                placeholder_srpms[srpm_name]["build_requires"].update(buildrequires)
-        
-        return placeholder_srpms
 
+                placeholder_srpms[srpm_name]["build_requires"].update(buildrequires)
+
+        return placeholder_srpms
 
     @lru_cache(maxsize = None)
     def view_maintainers(self, view_conf_id, arch):
@@ -1102,7 +1070,6 @@ class Query():
             maintainers.add(workload_conf["maintainer"])
 
         return maintainers
-
 
     @lru_cache(maxsize = None)
     def maintainers(self):
@@ -1119,7 +1086,7 @@ class Query():
                 maintainers[maintainer] = {}
                 maintainers[maintainer]["name"] = maintainer
                 maintainers[maintainer]["all_succeeded"] = True
-            
+
             if not workload["succeeded"]:
                 maintainers[maintainer]["all_succeeded"] = False
 
@@ -1133,18 +1100,16 @@ class Query():
                 maintainers[maintainer] = {}
                 maintainers[maintainer]["name"] = maintainer
                 maintainers[maintainer]["all_succeeded"] = True
-            
+
             if not env["succeeded"]:
                 maintainers[maintainer]["all_succeeded"] = False
 
         return maintainers
-    
 
     @lru_cache(maxsize = None)
     def view_pkg_name_details(self, pkg_name, view_conf_id):
         raise NotImplementedError
 
-    
     @lru_cache(maxsize = None)
     def view_srpm_name_details(self, srpm_name, view_conf_id):
         raise NotImplementedError

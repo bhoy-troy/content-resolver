@@ -91,6 +91,7 @@ def is_package_resolvable(base: Base, pkg_name: str) -> bool:
 ### Find build dependencies from a Koji root log ###
 ####################################################
 
+
 def _get_build_deps_from_a_root_log(root_log):
     """
     Given a packages Koji root_log, find its build dependencies.
@@ -401,8 +402,8 @@ def process_single_srpm_root_log(work_item):
             'error': str(e)
         }
 
-class Analyzer:
 
+class Analyzer:
     ###############################################################################
     ### Analyzing stuff! ##########################################################
     ###############################################################################
@@ -479,7 +480,6 @@ class Analyzer:
         counter = 0
 
         for this_record in self.metrics_data:
-
             if counter == 0:
                 prev_timestamp = this_record["timestamp"]
             else:
@@ -701,7 +701,6 @@ class Analyzer:
             if repo_data["exclude"]:
                 repo_config.get_excludepkgs_option().set(repo_data["exclude"])
 
-
     def _analyze_pkgs(self, repo, arch):
         log(f"Analyzing pkgs for {repo['name']} ({repo['id']}) {arch}")
 
@@ -744,7 +743,6 @@ class Analyzer:
                 if available_variants and not available_variants.get(repo_name, True):
                     log(f"  Skipping {repo_name} on {arch} (not in compose)")
                     continue
-
 
                 log(f"  Including {repo_name}")
 
@@ -984,7 +982,6 @@ class Analyzer:
 
         return relations
 
-
     def _analyze_env_without_leaking(self, env_conf, repo, arch):
 
         # DNF leaks memory and file descriptors :/
@@ -1002,7 +999,6 @@ class Analyzer:
             raise AnalysisError
 
         return queue_result.get()
-
 
     def _analyze_env_process(self, queue_result, env_conf, repo, arch):
 
@@ -1249,7 +1245,6 @@ class Analyzer:
         }
 
         return workload
-
 
     def _analyze_workload(self, workload_conf, env_conf, repo, arch):
 
@@ -1646,7 +1641,6 @@ class Analyzer:
             # including lower-priority duplicates (e.g., both ELN and Rawhide versions).
             workload["pkg_relations"] = self._analyze_package_relations(pkgs_all, package_placeholders)
 
-
         return workload
 
     def _analyze_workload_process(self, queue_result, workload_conf, env_conf, repo, arch):
@@ -1790,7 +1784,6 @@ class Analyzer:
                 workload = queue_result.get()
                 results[workload_id] = workload
 
-
     async def _analyze_workloads_async(self, results):
 
         tasks = []
@@ -1871,7 +1864,6 @@ class Analyzer:
                     # ... and each repo probably has multiple architecture.
                     repo = self.configs["repos"][repo_id]
                     for arch in repo["source"]["architectures"]:
-
                         # And now it has:
                         #   all workload configs *
                         #   all envs that match those *
@@ -2247,7 +2239,6 @@ class Analyzer:
 
         # Initialise each srpm
         for srpm_id, srpm in view["source_pkgs"].items():
-
             if srpm["placeholder"]:
                 directly_required_pkg_names = srpm["placeholder_directly_required_pkg_names"]
 
@@ -2321,7 +2312,6 @@ class Analyzer:
                 self.cache["root_log_deps"]["next"][koji_id] = {}
 
             for arch in self.data["buildroot"]["koji_srpms"][koji_id]:
-
                 # If the cache is empty, initialise it
                 if arch not in self.cache["root_log_deps"]["current"][koji_id]:
                     self.cache["root_log_deps"]["current"][koji_id][arch] = {}
@@ -2515,7 +2505,6 @@ class Analyzer:
             self.data["buildroot"]["build_groups"][repo_id] = {}
 
             for arch in self.data["buildroot"]["srpms"][repo_id]:
-
                 generated_id = f"CR-buildroot-base-env-{repo_id}-{arch}"
 
                 # Using the _analyze_env function!
@@ -2547,7 +2536,6 @@ class Analyzer:
         log("")
         log("  DONE!")
         log("")
-
 
     def _expand_buildroot_srpms(self):
         # This function is idempotent!
@@ -2609,7 +2597,6 @@ class Analyzer:
 
         return counter
 
-
     def _analyze_srpm_buildroots(self, pass_counter):
         # This function is idempotent!
         # That means it can be run many times without affecting the old results.
@@ -2635,7 +2622,6 @@ class Analyzer:
         for repo_id in self.data["buildroot"]["srpms"]:
             for arch in self.data["buildroot"]["srpms"][repo_id]:
                 for srpm_id, srpm in self.data["buildroot"]["srpms"][repo_id][arch].items():
-
                     if srpm["queued"] or srpm["processed"]:
                         continue
 
@@ -2656,7 +2642,7 @@ class Analyzer:
                     fake_env_conf = {}
                     fake_env_conf["labels"] = []
                     fake_env_conf["id"] = self.data["buildroot"]["build_groups"][repo_id][arch]["generated_id"]
-                    fake_env_conf["packages"] = ["bash"] # This just needs to pass the "if len(packages)" test as True
+                    fake_env_conf["packages"] = ["bash"]  # This just needs to pass the "if len(packages)" test as True
                     fake_env_conf["arch_packages"] = {}
                     fake_env_conf["arch_packages"][arch] = []
 
@@ -2673,7 +2659,6 @@ class Analyzer:
         for repo_id in self.data["buildroot"]["srpms"]:
             for arch in self.data["buildroot"]["srpms"][repo_id]:
                 for srpm_id, srpm in self.data["buildroot"]["srpms"][repo_id][arch].items():
-
                     if srpm["processed"]:
                         continue
 
@@ -2693,7 +2678,6 @@ class Analyzer:
         log("")
         log("  DONE!")
         log("")
-
 
     def _analyze_buildroot(self):
 
@@ -2972,7 +2956,6 @@ class Analyzer:
         target_pkg["best_maintainers"] = set()
 
         if type == "rpm":
-
             # Dependency of RPM NEVRs
             target_pkg["dependency_of_pkg_nevrs"] = set()
             target_pkg["hard_dependency_of_pkg_nevrs"] = set()
@@ -3156,8 +3139,6 @@ class Analyzer:
         views_all_arches = {}
 
         for view_conf_id, view_conf in self.configs["views"].items():
-
-            #if view_conf["type"] == "compose":
             if True:
                 repo_id = view_conf["repository"]
 
@@ -3320,7 +3301,6 @@ class Analyzer:
                                 view_all_arches[key][identifier]["buildroot_no_warnings"] = False
                                 view_all_arches[key][identifier]["warnings"][arch] = self.data["buildroot"]["srpms"][repo_id][arch][package["id"]]["warnings"]
 
-
                         view_all_arches[key][identifier]["arches"].add(arch)
 
                         self._populate_pkg_or_srpm_relations_fields(view_all_arches[key][identifier], package, type="srpm")
@@ -3328,7 +3308,6 @@ class Analyzer:
 
                     # Add binary packages to source packages
                     for pkg_id, pkg in view["pkgs"].items():
-
                         source_name = pkg["source_name"]
 
                         # Add package names
@@ -3476,12 +3455,10 @@ class Analyzer:
             if view_conf["type"] == "compose":
                 if view_conf["buildroot_strategy"] == "root_logs":
                     for arch in view_conf["architectures"]:
-
                         view_id = f"{view_conf_id}:{arch}"
                         view = self.data["views"][view_id]
 
                         self._add_unwanted_packages_to_view(view, view_conf)
-
 
     def _recommend_maintainers(self):
 
@@ -3611,7 +3588,6 @@ class Analyzer:
                             the_score_I_care_about = (prev_level, the_highest_sublevel_of_this_buildroot_srpm)
 
                             for buildroot_srpm_maintainer, buildroot_srpm_maintainer_scores in buildroot_srpm["maintainer_recommendation"].items():
-
                                 if the_score_I_care_about in buildroot_srpm_maintainer_scores:
 
                                     level_change_detection_tuple = (buildroot_srpm_name, pkg_name)
@@ -3641,7 +3617,6 @@ class Analyzer:
 
                                     self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level][sublevel][buildroot_srpm_maintainer]["locations"].add(buildroot_srpm_name)
 
-
                 # Time to look at runtime dependencies!
                 #
                 # Take all packages that depend on the previous group and assign them
@@ -3655,14 +3630,12 @@ class Analyzer:
                 sublevel_change_detection = set()
 
                 while sublevel_changes_made:
-
                     # Reset its memories. Let it make some new real memories!!
                     sublevel_changes_made = False
 
                     # Jump another sub-level down
                     prev_score = score
                     prev_sublevel = sublevel
-                    #sublevel += 1
                     sublevel = str(int(sublevel) + 1)
                     score = (level, sublevel)
 
@@ -3683,7 +3656,6 @@ class Analyzer:
                             # ... and if they're in the previous group, assign their maintainer(s)
                             for superior_pkg_maintainer, superior_pkg_maintainer_scores in superior_pkg["maintainer_recommendation"].items():
                                 if prev_score in superior_pkg_maintainer_scores:
-
                                     sublevel_change_detection_tuple = (superior_pkg_name, pkg_name, superior_pkg_maintainer)
                                     if sublevel_change_detection_tuple in sublevel_change_detection:
                                         continue
@@ -3718,7 +3690,6 @@ class Analyzer:
                                     reason = (superior_pkg_name, superior_srpm_name, pkg_name)
                                     self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level][sublevel][superior_pkg_maintainer]["reasons"].add(reason)
 
-
                 # Now add this info to the source packages
                 for pkg_name, pkg in view_all_arches["pkgs_by_name"].items():
                     source_name = pkg["source_name"]
@@ -3726,12 +3697,10 @@ class Analyzer:
                     # 1/  maintainer_recommendation
 
                     for maintainer, maintainer_scores in pkg["maintainer_recommendation"].items():
-
                         if maintainer not in self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name]["maintainer_recommendation"]:
                             self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name]["maintainer_recommendation"][maintainer] = set()
 
                         self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name]["maintainer_recommendation"][maintainer].update(maintainer_scores)
-
 
                         # Add it here so it's not processed again in the another level
                         this_level_srpms.add(source_name)
@@ -3739,17 +3708,14 @@ class Analyzer:
                     # 2/  maintainer_recommendation_details
 
                     for loop_level, loop_sublevels in pkg["maintainer_recommendation_details"].items():
-
                         if loop_level not in self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name]["maintainer_recommendation_details"]:
                             self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name]["maintainer_recommendation_details"][loop_level] = {}
 
                         for loop_sublevel, maintainers in loop_sublevels.items():
-
                             if loop_sublevel not in self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name]["maintainer_recommendation_details"][loop_level]:
                                 self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name]["maintainer_recommendation_details"][loop_level][loop_sublevel] = {}
 
                             for maintainer, maintainer_details in maintainers.items():
-
                                 if maintainer not in self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name]["maintainer_recommendation_details"][loop_level][loop_sublevel]:
                                     self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name]["maintainer_recommendation_details"][loop_level][loop_sublevel][maintainer] = {}
                                     self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name]["maintainer_recommendation_details"][loop_level][loop_sublevel][maintainer]["reasons"] = set()
@@ -3760,9 +3726,6 @@ class Analyzer:
 
                                 self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name]["maintainer_recommendation_details"][loop_level][loop_sublevel][maintainer]["reasons"].update(reasons)
                                 self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name]["maintainer_recommendation_details"][loop_level][loop_sublevel][maintainer]["locations"].update(locations)
-
-
-
 
                 # And set stuff for the next level
                 prev_level = level
@@ -3775,7 +3738,6 @@ class Analyzer:
 
             # And elect the best owners for each srpm
             for source_name, srpm in view_all_arches["source_pkgs_by_name"].items():
-
                 if not srpm["maintainer_recommendation_details"]:
                     continue
 
@@ -3799,7 +3761,6 @@ class Analyzer:
                 highest_number_of_dependencies = 0
                 best_maintainers = set()
                 for maint in maintainers_with_the_best_score:
-
                     # If we're looking at a direct build dependency, count the number of locations == SRPMs that directly need this
                     # And in all other cases count the reasons == the number of packages that runtime require
                     # (in case of 0,0 len(reasons) is always 1 as it just says "directly required" so that works fine)
@@ -3836,7 +3797,6 @@ class Analyzer:
         self.data["views"] = {}
 
         with tempfile.TemporaryDirectory() as tmp:
-
             if self.settings["dnf_cache_dir_override"]:
                 self.tmp_dnf_cachedir = self.settings["dnf_cache_dir_override"]
             else:
