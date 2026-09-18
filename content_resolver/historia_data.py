@@ -186,10 +186,7 @@ def _generate_chartjs_data(historic_data, query):
 
                 dataset = {}
                 dataset["data"] = []
-                dataset["label"] = "in {name} {arch}".format(
-                    name=env_conf["name"],
-                    arch=workload["arch"]
-                )
+                dataset["label"] = f"in {env_conf['name']} {workload['arch']}"
                 dataset["fill"] = "false"
 
 
@@ -236,9 +233,7 @@ def _generate_chartjs_data(historic_data, query):
 
                     dataset = {}
                     dataset["data"] = []
-                    dataset["label"] = "{arch}".format(
-                        arch=workload["arch"]
-                    )
+                    dataset["label"] = workload["arch"]
                     dataset["fill"] = "false"
 
                     for _,entry in historic_data.items():
@@ -283,10 +278,7 @@ def _generate_chartjs_data(historic_data, query):
 
                     dataset = {}
                     dataset["data"] = []
-                    dataset["label"] = "{repo} {arch}".format(
-                        repo=repo["name"],
-                        arch=workload["arch"]
-                    )
+                    dataset["label"] = f"{repo['name']} {workload['arch']}"
                     dataset["fill"] = "false"
 
                     for _,entry in historic_data.items():
@@ -366,10 +358,7 @@ def _generate_chartjs_data(historic_data, query):
 
                 dataset = {}
                 dataset["data"] = []
-                dataset["label"] = "in {name} {arch}".format(
-                    name=env_conf["name"],
-                    arch=env["arch"]
-                )
+                dataset["label"] = f"in {env_conf['name']} {env['arch']}"
                 dataset["fill"] = "false"
 
 
@@ -413,9 +402,7 @@ def _generate_chartjs_data(historic_data, query):
 
                 dataset = {}
                 dataset["data"] = []
-                dataset["label"] = "{arch}".format(
-                    arch=env["arch"]
-                )
+                dataset["label"] = env["arch"]
                 dataset["fill"] = "false"
 
                 for _,entry in historic_data.items():

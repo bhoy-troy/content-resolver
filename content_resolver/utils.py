@@ -44,9 +44,9 @@ def dump_data(path, data):
 def size(num, suffix='B'):
     for unit in ['','k','M','G']:
         if abs(num) < 1024.0:
-            return "%3.1f %s%s" % (num, unit, suffix)
+            return f"{num:3.1f} {unit}{suffix}"
         num /= 1024.0
-    return "%.1f %s%s" % (num, 'T', suffix)
+    return f"{num:.1f} T{suffix}"
 
 
 def workload_id_to_conf_id(workload_id):

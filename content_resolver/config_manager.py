@@ -704,7 +704,7 @@ class ConfigManager:
         """
         log("")
         log("Filtering configs to process only selected labels...")
-        log("Selected labels: {}".format(", ".join(selected_label_ids)))
+        log(f"Selected labels: {selected_label_ids}")
         log("")
 
         needed_labels = set(selected_label_ids)
@@ -717,7 +717,7 @@ class ConfigManager:
                 filtered_workloads[workload_id] = workload_conf
 
         configs["workloads"] = filtered_workloads
-        log("  Filtered to {} workloads".format(len(configs["workloads"])))
+        log(f"  Filtered to {len(configs['workloads'])} workloads")
 
         # Step 2: Filter environments - only those matching selected labels
         filtered_envs = {}
@@ -730,7 +730,7 @@ class ConfigManager:
                 needed_repos_from_envs.update(env_conf.get("repositories", []))
 
         configs["envs"] = filtered_envs
-        log("  Filtered to {} environments: {}".format(len(configs["envs"]),  ", ".join(sorted(configs["envs"]))))
+        log(f"  Filtered to {len(configs['envs'])} environments: {', '.join(sorted(configs['envs']))}")
 
         # Step 3: Filter views - only those matching selected labels
         # Also handle addon views by including their base views if needed
@@ -762,7 +762,7 @@ class ConfigManager:
                     err_log(f"Warning: Base view '{base_view_id}' not found for addon view")
 
         configs["views"] = filtered_views
-        log("  Filtered to {} views: {}".format(len(configs["views"]),  ", ".join(sorted(configs["views"]))))
+        log(f"  Filtered to {len(configs["views"])} views: {', '.join(sorted(configs['views']))}")
 
         # Step 4: Filter repositories - only those referenced by filtered views or environments
         needed_repos = needed_repos_from_views | needed_repos_from_envs
@@ -773,7 +773,7 @@ class ConfigManager:
                 filtered_repos[repo_id] = repo_conf
 
         configs["repos"] = filtered_repos
-        log("  Filtered to {} repositories: {}".format(len(configs["repos"]),  ", ".join(sorted(configs["repos"]))))
+        log(f"  Filtered to {len(configs['repos'])} repositories: {', '.join(sorted(configs['repos']))}")
 
         log("")
         log("Config filtering complete!")
@@ -1047,11 +1047,11 @@ class ConfigManager:
             log("Summary Before Filtering:")
             log("--------")
             log("")
-            log("  - {} views".format(len(configs["views"])))
-            log("  - {} repositories".format(len(configs["repos"])))
-            log("  - {} environments".format(len(configs["envs"])))
-            log("  - {} workloads".format(len(configs["workloads"])))
-            log("  - {} exclusion lists".format(len(configs["unwanteds"])))
+            log(f"  - {len(configs['views'])} views")
+            log(f"  - {len(configs['repos'])} repositories")
+            log(f"  - {len(configs['envs'])} environments")
+            log(f"  - {len(configs['workloads'])} workloads")
+            log(f"  - {len(configs['unwanteds'])} exclusion lists")
             log("")
             selected_label_ids = [v.strip() for v in self.settings["selected_labels"].split(",")]
             configs = self.filter_configs_by_labels(configs, selected_label_ids)
@@ -1059,11 +1059,11 @@ class ConfigManager:
         log("Summary:")
         log("--------")
         log("")
-        log("  - {} views".format(len(configs["views"])))
-        log("  - {} repositories".format(len(configs["repos"])))
-        log("  - {} environments".format(len(configs["envs"])))
-        log("  - {} workloads".format(len(configs["workloads"])))
-        log("  - {} exclusion lists".format(len(configs["unwanteds"])))
+        log(f"  - {len(configs['views'])} views")
+        log(f"  - {len(configs['repos'])} repositories")
+        log(f"  - {len(configs['envs'])} environments")
+        log(f"  - {len(configs['workloads'])} workloads")
+        log(f"  - {len(configs['unwanteds'])} exclusion lists")
         log("")
 
 
