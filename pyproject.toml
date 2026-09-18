@@ -1,0 +1,36 @@
+[project]
+name = "Content-Resolver"
+version = "0.0.0"
+description = "A tool to inspect package sets of RPM-based Linux distributions"
+
+readme = "README.md"
+
+requires-python = ">=3.14"
+
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Operating System :: POSIX :: Linux",
+    "Framework :: Twisted",
+    "Topic :: System :: Software Distribution",
+]
+
+
+[project.urls]
+"Homepage" = "https://github.com/fedora-eln/content-resolver/"
+"Bug Tracker" = "https://github.com/fedora-eln/content-resolver/issues"
+
+
+[tool.ruff]
+line-length = 120
+target-version = "py314"
+
+[tool.ruff.lint]
+# Enable Pyflakes (F), pycodestyle (E, W), isort (I), Bugbear (B), and Pyupgrade (UP)
+# Enable the flake8-commas rule set (COM) to find missing trailing commas
+select = ["E", "W", "F",  "I", "C", "B", "UP", "COM812"]
+ignore = ["E501", "B019", "C901", "COM812"]
+extend-select = ["B"]
+
+[tool.ruff.lint.isort]
+split-on-trailing-comma=true
