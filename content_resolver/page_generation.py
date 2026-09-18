@@ -1,6 +1,8 @@
 import os
 import subprocess
+
 import jinja2
+
 from content_resolver.data_generation import _generate_json_file
 from content_resolver.utils import dump_data, log
 

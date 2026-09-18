@@ -1,15 +1,14 @@
 #!/usr/bin/python3
 
 import datetime
+
 from content_resolver.analyzer import Analyzer
+from content_resolver.config_manager import ConfigManager
 from content_resolver.data_generation import generate_data_files
 from content_resolver.historia_data import generate_historic_data
 from content_resolver.page_generation import generate_pages
 from content_resolver.query import Query
-from content_resolver.utils import load_data, log, datetime_now_string, dump_data
-from content_resolver.config_manager import ConfigManager
-
-
+from content_resolver.utils import datetime_now_string, dump_data, load_data, log
 
 # Features of this new release
 # - multiarch from the ground up!

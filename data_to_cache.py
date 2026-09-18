@@ -8,6 +8,7 @@
 # Use feedback_pipeline.py with the --use-cache option.
 
 import os, json
+import json
 
 class SetEncoder(json.JSONEncoder):
     def default(self, obj):

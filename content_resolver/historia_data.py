@@ -2,6 +2,7 @@ import datetime
 import json
 import os
 import re
+
 from content_resolver.data_generation import _generate_json_file
 from content_resolver.utils import dump_data, err_log, log
 

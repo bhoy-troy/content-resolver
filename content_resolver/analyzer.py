@@ -12,11 +12,10 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import koji
 from libdnf5.base import Base, Goal, GoalJobSettings
-from libdnf5.exception import BaseTransactionError
+from libdnf5.common import QueryCmp_GLOB
+from libdnf5.exception import BaseTransactionError, UserAssertionError
 from libdnf5.exception import Error as DnfErr
 from libdnf5.exception import RepoDownloadError as Dnf5RepoDownloadError
-from libdnf5.exception import UserAssertionError
-from libdnf5.common import QueryCmp_GLOB
 from libdnf5.repo import RepoQuery
 from libdnf5.rpm import PackageQuery
 

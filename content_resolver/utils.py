@@ -2,8 +2,8 @@ import datetime
 import json
 import re
 import sys
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Iterator
 
 import jinja2
 import libdnf5
