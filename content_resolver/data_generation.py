@@ -272,7 +272,7 @@ def _generate_view_json_files(query):
             "hard_dependency_of_pkg_nevrs",
             "weak_dependency_of_pkg_nevrs",
             "in_workload_conf_ids_req",
-            "level_number"
+            "level_number",
         ]
 
         for pkg_id, pkg in view_all_arches["pkgs_by_nevr"].items():
@@ -363,10 +363,10 @@ def generate_data_files(query):
     # Generate the package lists for views
     _generate_view_lists(query)
 
-    # Generate the JSON files for envs 
+    # Generate the JSON files for envs
     _generate_env_json_files(query)
 
-    # Generate the JSON files for workloads 
+    # Generate the JSON files for workloads
     _generate_workload_json_files(query)
 
     # Generate the JSON files for views

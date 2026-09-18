@@ -38,19 +38,19 @@ def _generate_workload_pages(query):
     log("Generating workload pages...")
 
     # Workload overview pages
-    for workload_conf_id in query.workloads(None,None,None,None,output_change="workload_conf_ids"):
-        for repo_id in query.workloads(workload_conf_id,None,None,None,output_change="repo_ids"):
+    for workload_conf_id in query.workloads(None, None, None, None, output_change="workload_conf_ids"):
+        for repo_id in query.workloads(workload_conf_id, None, None, None, output_change="repo_ids"):
             template_data = {
                 "query": query,
                 "workload_conf_id": workload_conf_id,
-                "repo_id": repo_id
+                "repo_id": repo_id,
             }
 
             page_name = f"workload-overview--{workload_conf_id}--{repo_id}"
             _generate_html_page("workload_overview", template_data, page_name, query.settings)
 
     # Workload detail pages
-    for workload_id in query.workloads(None,None,None,None,list_all=True):
+    for workload_id in query.workloads(None, None, None, None, list_all=True):
         workload = query.data["workloads"][workload_id]
 
         workload_conf_id = workload["workload_conf_id"]
@@ -68,7 +68,7 @@ def _generate_workload_pages(query):
             "workload": workload,
             "workload_conf": workload_conf,
             "env_conf": env_conf,
-            "repo": repo
+            "repo": repo,
         }
 
         page_name = f"workload--{workload_id}"
@@ -77,10 +77,10 @@ def _generate_workload_pages(query):
         _generate_html_page("workload_dependencies", template_data, page_name, query.settings)
 
     # Workload compare arches pages
-    for workload_conf_id in query.workloads(None,None,None,None,output_change="workload_conf_ids"):
-        for env_conf_id in query.workloads(workload_conf_id,None,None,None,output_change="env_conf_ids"):
-            for repo_id in query.workloads(workload_conf_id,env_conf_id,None,None,output_change="repo_ids"):
-                arches = query.workloads(workload_conf_id,env_conf_id,repo_id,None,output_change="arches")
+    for workload_conf_id in query.workloads(None, None, None, None, output_change="workload_conf_ids"):
+        for env_conf_id in query.workloads(workload_conf_id, None, None, None, output_change="env_conf_ids"):
+            for repo_id in query.workloads(workload_conf_id, env_conf_id, None, None, output_change="repo_ids"):
+                arches = query.workloads(workload_conf_id, env_conf_id, repo_id, None, output_change="arches")
 
                 workload_conf = query.configs["workloads"][workload_conf_id]
                 env_conf = query.configs["envs"][env_conf_id]
@@ -91,7 +91,7 @@ def _generate_workload_pages(query):
                 for arch in arches:
                     columns[arch] = {}
 
-                    pkgs = query.workload_pkgs(workload_conf_id,env_conf_id,repo_id,arch)
+                    pkgs = query.workload_pkgs(workload_conf_id, env_conf_id, repo_id, arch)
                     for pkg in pkgs:
                         name = pkg["name"]
                         rows.add(name)
@@ -106,7 +106,7 @@ def _generate_workload_pages(query):
                     "repo_id": repo_id,
                     "repo": repo,
                     "columns": columns,
-                    "rows": rows
+                    "rows": rows,
                 }
 
                 page_name = f"workload-cmp-arches--{workload_conf_id}--{env_conf_id}--{repo_id}"
@@ -114,10 +114,10 @@ def _generate_workload_pages(query):
                 _generate_html_page("workload_cmp_arches", template_data, page_name, query.settings)
 
     # Workload compare envs pages
-    for workload_conf_id in query.workloads(None,None,None,None,output_change="workload_conf_ids"):
-        for repo_id in query.workloads(workload_conf_id,None,None,None,output_change="repo_ids"):
-            for arch in query.workloads(workload_conf_id,None,repo_id,None,output_change="arches"):
-                env_conf_ids = query.workloads(workload_conf_id,None,repo_id,arch,output_change="env_conf_ids")
+    for workload_conf_id in query.workloads(None, None, None, None, output_change="workload_conf_ids"):
+        for repo_id in query.workloads(workload_conf_id, None, None, None, output_change="repo_ids"):
+            for arch in query.workloads(workload_conf_id, None, repo_id, None, output_change="arches"):
+                env_conf_ids = query.workloads(workload_conf_id, None, repo_id, arch, output_change="env_conf_ids")
 
                 workload_conf = query.configs["workloads"][workload_conf_id]
                 repo = query.configs["repos"][repo_id]
@@ -127,7 +127,7 @@ def _generate_workload_pages(query):
                 for env_conf_id in env_conf_ids:
                     columns[env_conf_id] = {}
 
-                    pkgs = query.workload_pkgs(workload_conf_id,env_conf_id,repo_id,arch)
+                    pkgs = query.workload_pkgs(workload_conf_id, env_conf_id, repo_id, arch)
                     for pkg in pkgs:
                         name = pkg["name"]
                         rows.add(name)
@@ -141,7 +141,7 @@ def _generate_workload_pages(query):
                     "repo": repo,
                     "arch": arch,
                     "columns": columns,
-                    "rows": rows
+                    "rows": rows,
                 }
 
                 page_name = f"workload-cmp-envs--{workload_conf_id}--{repo_id}--{arch}"
@@ -155,19 +155,19 @@ def _generate_workload_pages(query):
 def _generate_env_pages(query):
     log("Generating env pages...")
 
-    for env_conf_id in query.envs(None,None,None,output_change="env_conf_ids"):
-        for repo_id in query.envs(env_conf_id,None,None,output_change="repo_ids"):
+    for env_conf_id in query.envs(None, None, None, output_change="env_conf_ids"):
+        for repo_id in query.envs(env_conf_id, None, None, output_change="repo_ids"):
             template_data = {
                 "query": query,
                 "env_conf_id": env_conf_id,
-                "repo_id": repo_id
+                "repo_id": repo_id,
             }
 
             page_name = f"env-overview--{env_conf_id}--{repo_id}"
             _generate_html_page("env_overview", template_data, page_name, query.settings)
 
     # env detail pages
-    for env_id in query.envs(None,None,None,list_all=True):
+    for env_id in query.envs(None, None, None, list_all=True):
         env = query.data["envs"][env_id]
 
         env_conf_id = env["env_conf_id"]
@@ -191,10 +191,9 @@ def _generate_env_pages(query):
         _generate_html_page("env_dependencies", template_data, page_name, query.settings)
 
     # env compare arches pages
-    for env_conf_id in query.envs(None,None,None,output_change="env_conf_ids"):
-        for repo_id in query.envs(env_conf_id,None,None,output_change="repo_ids"):
-
-            arches = query.envs(env_conf_id,repo_id,None,output_change="arches")
+    for env_conf_id in query.envs(None, None, None, output_change="env_conf_ids"):
+        for repo_id in query.envs(env_conf_id, None, None, output_change="repo_ids"):
+            arches = query.envs(env_conf_id, repo_id, None, output_change="arches")
 
             env_conf = query.configs["envs"][env_conf_id]
             repo = query.configs["repos"][repo_id]
@@ -204,7 +203,7 @@ def _generate_env_pages(query):
             for arch in arches:
                 columns[arch] = {}
 
-                pkgs = query.env_pkgs(env_conf_id,repo_id,arch)
+                pkgs = query.env_pkgs(env_conf_id, repo_id, arch)
                 for pkg in pkgs:
                     name = pkg["name"]
                     rows.add(name)
@@ -217,7 +216,7 @@ def _generate_env_pages(query):
                 "repo_id": repo_id,
                 "repo": repo,
                 "columns": columns,
-                "rows": rows
+                "rows": rows,
             }
 
             page_name = f"env-cmp-arches--{env_conf_id}--{repo_id}"
@@ -232,10 +231,9 @@ def _generate_maintainer_pages(query):
     log("Generating maintainer pages...")
 
     for maintainer in query.maintainers():
-
         template_data = {
             "query": query,
-            "maintainer": maintainer
+            "maintainer": maintainer,
         }
 
         # Overview page
@@ -256,62 +254,53 @@ def _generate_config_pages(query):
     for conf_type in ["repos", "envs", "workloads", "labels", "views", "unwanteds"]:
         template_data = {
             "query": query,
-            "conf_type": conf_type
+            "conf_type": conf_type,
         }
         page_name = f"configs_{conf_type}"
         _generate_html_page("configs", template_data, page_name, query.settings)
 
     # Config repo pages
-    for repo_id,repo_conf in query.configs["repos"].items():
+    for repo_id, repo_conf in query.configs["repos"].items():
         template_data = {
             "query": query,
-            "repo_conf": repo_conf
+            "repo_conf": repo_conf,
         }
         page_name = f"config-repo--{repo_id}"
         _generate_html_page("config_repo", template_data, page_name, query.settings)
 
     # Config env pages
-    for env_conf_id,env_conf in query.configs["envs"].items():
+    for env_conf_id, env_conf in query.configs["envs"].items():
         template_data = {
             "query": query,
-            "env_conf": env_conf
+            "env_conf": env_conf,
         }
         page_name = f"config-env--{env_conf_id}"
         _generate_html_page("config_env", template_data, page_name, query.settings)
 
     # Config workload pages
-    for workload_conf_id,workload_conf in query.configs["workloads"].items():
+    for workload_conf_id, workload_conf in query.configs["workloads"].items():
         template_data = {
             "query": query,
-            "workload_conf": workload_conf
+            "workload_conf": workload_conf,
         }
         page_name = f"config-workload--{workload_conf_id}"
         _generate_html_page("config_workload", template_data, page_name, query.settings)
 
     # Config label pages
-    for label_conf_id,label_conf in query.configs["labels"].items():
-        template_data = {
-            "query": query,
-            "label_conf": label_conf
-        }
+    for label_conf_id, label_conf in query.configs["labels"].items():
+        template_data = {"query": query, "label_conf": label_conf}
         page_name = f"config-label--{label_conf_id}"
         _generate_html_page("config_label", template_data, page_name, query.settings)
 
     # Config view pages
-    for view_conf_id,view_conf in query.configs["views"].items():
-        template_data = {
-            "query": query,
-            "view_conf": view_conf
-        }
+    for view_conf_id, view_conf in query.configs["views"].items():
+        template_data = {"query": query, "view_conf": view_conf}
         page_name = f"config-view--{view_conf_id}"
         _generate_html_page("config_view", template_data, page_name, query.settings)
 
     # Config unwanted pages
-    for unwanted_conf_id,unwanted_conf in query.configs["unwanteds"].items():
-        template_data = {
-            "query": query,
-            "unwanted_conf": unwanted_conf
-        }
+    for unwanted_conf_id, unwanted_conf in query.configs["unwanteds"].items():
+        template_data = {"query": query, "unwanted_conf": unwanted_conf}
         page_name = f"config-unwanted--{unwanted_conf_id}"
         _generate_html_page("config_unwanted", template_data, page_name, query.settings)
 
@@ -327,7 +316,7 @@ def _generate_repo_pages(query):
             template_data = {
                 "query": query,
                 "repo": repo,
-                "arch": arch
+                "arch": arch,
             }
             page_name = f"repo--{repo_id}--{arch}"
             _generate_html_page("repo", template_data, page_name, query.settings)
@@ -345,7 +334,7 @@ def _generate_view_pages(query):
         template_data = {
             "query": query,
             "view_conf": view_conf,
-            "view_all_arches": view_all_arches
+            "view_all_arches": view_all_arches,
         }
 
         # Generate the overview page
@@ -441,7 +430,7 @@ def generate_pages(query):
     template_env = jinja2.Environment(
         loader=template_loader,
         trim_blocks=True,
-        lstrip_blocks=True
+        lstrip_blocks=True,
     )
     query.settings["jinja2_template_env"] = template_env
 
@@ -464,7 +453,7 @@ def generate_pages(query):
 
     # Generate the top-level results pages
     template_data = {
-        "query": query
+        "query": query,
     }
     _generate_html_page("repos", template_data, "repos", query.settings)
     _generate_html_page("envs", template_data, "envs", query.settings)
@@ -490,11 +479,11 @@ def generate_pages(query):
 
     # Dump all data
     # The data is now pretty huge and not really needed anyway
-    #if not query.settings["use_cache"]:
+    # if not query.settings["use_cache"]:
     #    _dump_all_data(query)
 
     # Generate the errors page
     template_data = {
-        "query": query
+        "query": query,
     }
     _generate_html_page("errors", template_data, "errors", query.settings)

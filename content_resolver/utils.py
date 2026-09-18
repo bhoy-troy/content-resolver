@@ -19,7 +19,7 @@ class SetEncoder(json.JSONEncoder):
 
 
 def load_data(path):
-    with open(path, 'r') as file:
+    with open(path, "r") as file:
         data = json.load(file)
     return data
 
@@ -33,17 +33,17 @@ def err_log(msg):
 
 
 def pkg_id_to_name(pkg_id):
-    pkg_name = pkg_id.rsplit("-",2)[0]
+    pkg_name = pkg_id.rsplit("-", 2)[0]
     return pkg_name
 
 
 def dump_data(path, data):
-    with open(path, 'w') as file:
+    with open(path, "w") as file:
         json.dump(data, file, cls=SetEncoder)
 
 
-def size(num, suffix='B'):
-    for unit in ['','k','M','G']:
+def size(num, suffix="B"):
+    for unit in ["", "k", "M", "G"]:
         if abs(num) < 1024.0:
             return f"{num:3.1f} {unit}{suffix}"
         num /= 1024.0
@@ -68,7 +68,7 @@ def url_to_id(url):
         url = url[:-1]
 
     # and replace all non-alphanumeric characters with -
-    regex = re.compile('[^0-9a-zA-Z]')
+    regex = re.compile("[^0-9a-zA-Z]")
     return regex.sub("-", url)
 
 

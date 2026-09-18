@@ -6,7 +6,7 @@
 import multiprocessing
 
 try:
-    multiprocessing.set_start_method('fork')
+    multiprocessing.set_start_method("fork")
 except RuntimeError as err:
     # Already set, ignore
     pass

@@ -32,7 +32,6 @@ from content_resolver.utils import (
     load_data,
     log,
     pkg_id_to_name,
-    size,
     url_to_id,
     workload_id_to_conf_id,
 )
@@ -62,7 +61,7 @@ def is_package_resolvable(base: Base, pkg_name: str) -> bool:
     # DNF5's filter_name() defaults to exact matching, so we must
     # explicitly use QueryCmp_GLOB when the name contains wildcards.
     # TODO: do we need more precise wildcard chars?
-    is_glob = any(c in pkg_name for c in ('*', '?'))
+    is_glob = any(c in pkg_name for c in ("*", "?"))
 
     # First check if it exists as a real package name
     if is_glob:
@@ -312,32 +311,32 @@ def process_single_srpm_root_log(work_item):
             srpm_name = srpm_id.rsplit("-", 2)[0]
             if srpm_name in ["bash", "make", "unzip"]:
                 return {
-                    'srpm_id': srpm_id,
-                    'arch': arch,
-                    'deps': ["gawk", "xz", "findutils"],
-                    'error': None
+                    "srpm_id": srpm_id,
+                    "arch": arch,
+                    "deps": ["gawk", "xz", "findutils"],
+                    "error": None,
                 }
             elif srpm_name in ["gawk", "xz", "findutils"]:
                 return {
-                    'srpm_id': srpm_id,
-                    'arch': arch,
-                    'deps': ['cpio', 'diffutils'],
-                    'error': None
+                    "srpm_id": srpm_id,
+                    "arch": arch,
+                    "deps": ["cpio", "diffutils"],
+                    "error": None,
                 }
             return {
-                'srpm_id': srpm_id,
-                'arch': arch,
-                'deps': ["bash", "make", "unzip"],
-                'error': None
+                "srpm_id": srpm_id,
+                "arch": arch,
+                "deps": ["bash", "make", "unzip"],
+                "error": None,
             }
 
         # Handle special cases
         if srpm_id.rsplit("-", 2)[0] in ["shim"]:
             return {
-                'srpm_id': srpm_id,
-                'arch': arch,
-                'deps': [],
-                'error': None
+                "srpm_id": srpm_id,
+                "arch": arch,
+                "deps": [],
+                "error": None,
             }
 
         # Create koji session
@@ -348,10 +347,10 @@ def process_single_srpm_root_log(work_item):
 
         if not koji_log_path:
             return {
-                'srpm_id': srpm_id,
-                'arch': arch,
-                'deps': [],
-                'error': None
+                "srpm_id": srpm_id,
+                "arch": arch,
+                "deps": [],
+                "error": None,
             }
 
         # Download root.log
@@ -361,10 +360,10 @@ def process_single_srpm_root_log(work_item):
         except KojiRootLogError as e:
             # Download failed
             return {
-                'srpm_id': srpm_id,
-                'arch': arch,
-                'deps': [],
-                'error': f"Download failed: {str(e)}"
+                "srpm_id": srpm_id,
+                "arch": arch,
+                "deps": [],
+                "error": f"Download failed: {str(e)}",
             }
 
         # Parse dependencies
@@ -373,10 +372,10 @@ def process_single_srpm_root_log(work_item):
         except Exception as e:
             # Parsing failed
             return {
-                'srpm_id': srpm_id,
-                'arch': arch,
-                'deps': [],
-                'error': f"Parse failed: {str(e)}"
+                "srpm_id": srpm_id,
+                "arch": arch,
+                "deps": [],
+                "error": f"Parse failed: {str(e)}",
             }
 
         # Check if parsing yielded suspiciously few dependencies
@@ -387,19 +386,19 @@ def process_single_srpm_root_log(work_item):
             warning = f"WARNING: Only {len(deps)} dependencies found (expected more)"
 
         return {
-            'srpm_id': srpm_id,
-            'arch': arch,
-            'deps': deps,
-            'error': None,
-            'warning': warning
+            "srpm_id": srpm_id,
+            "arch": arch,
+            "deps": deps,
+            "error": None,
+            "warning": warning,
         }
 
     except Exception as e:
         return {
-            'srpm_id': work_item.get('srpm_id', 'unknown'),
-            'arch': work_item.get('arch', 'unknown'),
-            'deps': [],
-            'error': str(e)
+            "srpm_id": work_item.get("srpm_id", "unknown"),
+            "arch": work_item.get("arch", "unknown"),
+            "deps": [],
+            "error": str(e),
         }
 
 
@@ -483,7 +482,7 @@ class Analyzer:
             if counter == 0:
                 prev_timestamp = this_record["timestamp"]
             else:
-                self.metrics_data[counter-1]["timestamp"]
+                self.metrics_data[counter - 1]["timestamp"]
 
             time_diff = this_record["timestamp"] - prev_timestamp
 
@@ -514,18 +513,22 @@ class Analyzer:
                         continue
 
                     if len(deps) == 0:
-                        zero_deps_cached.append({
-                            'srpm_id': srpm_id,
-                            'arch': arch,
-                            'koji_id': koji_id
-                        })
+                        zero_deps_cached.append(
+                            {
+                                "srpm_id": srpm_id,
+                                "arch": arch,
+                                "koji_id": koji_id,
+                            }
+                        )
                     elif len(deps) < 3:
-                        low_deps_cached.append({
-                            'srpm_id': srpm_id,
-                            'arch': arch,
-                            'deps': deps,
-                            'koji_id': koji_id
-                        })
+                        low_deps_cached.append(
+                            {
+                                "srpm_id": srpm_id,
+                                "arch": arch,
+                                "deps": deps,
+                                "koji_id": koji_id,
+                            }
+                        )
 
         # Some verbose logging for debugging
         # TODO: Enable some form of log level to increase/decrease verbosity of logs
@@ -603,7 +606,7 @@ class Analyzer:
         try:
             # Fetch composeinfo.json
             with urllib.request.urlopen(composeinfo_url, timeout=10) as response:
-                compose_data = json.loads(response.read().decode('utf-8'))
+                compose_data = json.loads(response.read().decode("utf-8"))
 
             # Extract variants available for this architecture
             compose_variants = set()
@@ -888,7 +891,9 @@ class Analyzer:
                     composeinfo_data = json.loads(composeinfo_raw_response)
                     self.data["repos"][repo_id]["composeinfo"] = composeinfo_data
 
-                    compose_date = datetime.datetime.strptime(composeinfo_data["payload"]["compose"]["date"], "%Y%m%d").date()
+                    compose_date = datetime.datetime.strptime(
+                        composeinfo_data["payload"]["compose"]["date"], "%Y%m%d"
+                    ).date()
                     self.data["repos"][repo_id]["compose_date"] = compose_date.strftime("%Y-%m-%d")
 
                     date_now = datetime.datetime.now().date()
@@ -1099,7 +1104,10 @@ class Analyzer:
                             break
 
             if not success:
-                err = f"Failed to download repodata while analyzing environment '{env_conf['id']}' from '{repo['id']}' {arch}:"
+                err = (
+                    f"Failed to download repodata while analyzing environment "
+                    f"'{env_conf['id']}' from '{repo['id']}' {arch}:"
+                )
                 err_log(err)
                 raise RepoDownloadError(err)
 
@@ -1128,7 +1136,7 @@ class Analyzer:
                     # DNF5: add_group_install takes spec and options
                     settings = GoalJobSettings()
                     goal.add_group_install(grp_spec, settings)
-                except (UserAssertionError, DnfErr):
+                except UserAssertionError, DnfErr:
                     env["errors"]["non_existing_pkgs"].append(grp_spec)
                     continue
 
@@ -1357,8 +1365,10 @@ class Analyzer:
                                 break
 
                 if not success:
-                    err = (f"Failed to download repodata while analyzing workload '{workload['workload_conf_id']}' on "
-                           f"'{workload['env_conf_id']}' from '{workload['repo_id']}' {workload['arch']}...")
+                    err = (
+                        f"Failed to download repodata while analyzing workload '{workload['workload_conf_id']}' on "
+                        f"'{workload['env_conf_id']}' from '{workload['repo_id']}' {workload['arch']}..."
+                    )
                     err_log(err)
                     raise RepoDownloadError(err)
             else:
@@ -1395,8 +1405,10 @@ class Analyzer:
                                 break
 
                 if not success:
-                    err = (f"Failed to download repodata while analyzing workload '{workload['workload_conf_id']}' on "
-                           f"'{workload['env_conf_id']}' from '{workload['repo_id']}' {workload['arch']}...")
+                    err = (
+                        f"Failed to download repodata while analyzing workload '{workload['workload_conf_id']}' on "
+                        f"'{workload['env_conf_id']}' from '{workload['repo_id']}' {workload['arch']}..."
+                    )
                     err_log(err)
                     raise RepoDownloadError(err)
 
@@ -1428,7 +1440,7 @@ class Analyzer:
                     # DNF5: add_group_install with settings
                     settings = GoalJobSettings()
                     goal.add_group_install(grp_spec, settings)
-                except (UserAssertionError, DnfErr):
+                except UserAssertionError, DnfErr:
                     workload["errors"]["non_existing_pkgs"].append(grp_spec)
                     continue
 
@@ -1502,9 +1514,13 @@ class Analyzer:
                         pkg_string = f"  - {pkg_name}"
                         error_message_list.append(pkg_string)
                     error_message_list.append("")
-                    error_message_list.append("Note: Add 'strict' to the workload options to treat missing packages as errors.")
+                    error_message_list.append(
+                        "Note: Add 'strict' to the workload options to treat missing packages as errors."
+                    )
                 if workload["warnings"]["non_existing_placeholder_deps"]:
-                    error_message_list.append("The following dependencies of package placeholders are not available (and were skipped):")
+                    error_message_list.append(
+                        "The following dependencies of package placeholders are not available (and were skipped):"
+                    )
                     # TODO: use comprehension and `error_message_list.extend([])`
                     for pkg_name in workload["warnings"]["non_existing_placeholder_deps"]:
                         pkg_string = f"  - {pkg_name}"
@@ -1523,17 +1539,23 @@ class Analyzer:
                 error_message = str(err)
 
                 # Check if this is a dependency chain failure (missing transitive dependency)
-                if "nothing provides" in error_message.lower() or "but none of the providers can be installed" in error_message.lower():
-                    error_lines = ["Dependency resolution failed:", ""]
-                    error_lines.append("This workload requires packages that have unmet dependencies.")
-                    error_lines.append("Common causes:")
-                    error_lines.append("  - A required package has been retired from Fedora")
-                    error_lines.append("  - A dependency is missing or not yet built")
-                    error_lines.append("  - Package maintainer needs to update dependencies")
-                    error_lines.append("")
-                    error_lines.append("Detailed error from DNF:")
-                    error_lines.append("-" * 70)
-                    error_lines.append(error_message)
+                if (
+                    "nothing provides" in error_message.lower()
+                    or "but none of the providers can be installed" in error_message.lower()
+                ):
+                    error_lines = [
+                        "Dependency resolution failed:",
+                        "",
+                        "This workload requires packages that have unmet dependencies.",
+                        "Common causes:",
+                        "  - A required package has been retired from Fedora",
+                        "  - A dependency is missing or not yet built",
+                        "  - Package maintainer needs to update dependencies",
+                        "",
+                        "Detailed error from DNF:",
+                        "-" * 70,
+                        error_message,
+                    ]
                     workload["errors"]["message"] = "\n".join(error_lines)
                 else:
                     workload["errors"]["message"] = error_message
@@ -1570,21 +1592,21 @@ class Analyzer:
                 #   "package X from RepoA requires Y = v1, but none of the providers can be installed"
                 #   "package Z from RepoB requires Y = v2, but none of the providers can be installed"
                 # These indicate different repos wanting different versions of same dependency
-                lines = error_message.split('\n')
-                requires_lines = [l for l in lines if 'requires' in l.lower() and 'from' in l.lower()]
+                lines = error_message.split("\n")
+                requires_lines = [l for l in lines if "requires" in l.lower() and "from" in l.lower()]
                 has_multi_version_conflict = len(requires_lines) >= 2
 
                 # Pattern 3: "conflicting requests" or "cannot install the best candidate"
-                has_conflict_markers = ("conflicting requests" in error_lower or
-                                       "cannot install the best candidate" in error_lower)
+                has_conflict_markers = (
+                    "conflicting requests" in error_lower or "cannot install the best candidate" in error_lower
+                )
 
                 # Real dependency errors that should NOT be filtered
                 has_nothing_provides = "nothing provides" in error_lower
                 has_package_already_installed = "already installed" in error_lower
 
                 # Filter logic: ignore if it's ONLY repo conflicts, no real missing deps
-                is_repo_conflict = (has_cannot_install_both or
-                                  (has_multi_version_conflict and has_conflict_markers))
+                is_repo_conflict = has_cannot_install_both or (has_multi_version_conflict and has_conflict_markers)
                 is_real_error = has_nothing_provides
 
                 if is_repo_conflict and not is_real_error:
@@ -1596,7 +1618,9 @@ class Analyzer:
                     workload["errors"]["message"] = error_message
                     log(f"  Failed to resolve dependencies for {workload_conf['id']}")
                     # Show truncated error for debugging
-                    error_display = error_message if len(error_message) <= 500 else error_message[:500] + "...(truncated)"
+                    error_display = (
+                        error_message if len(error_message) <= 500 else error_message[:500] + "...(truncated)"
+                    )
                     log(f"  Error: {error_display}")
                     return workload
 
@@ -1662,7 +1686,8 @@ class Analyzer:
                 "errors": {
                     "non_existing_pkgs": [],
                     "non_existing_placeholder_deps": [],
-                    "message": f"Workload analysis failed with exception:\n{type(e).__name__}: {str(e)}\n\nTraceback:\n{traceback.format_exc()}",
+                    "message": f"Workload analysis failed with exception:\n{type(e).__name__}: "
+                    f"{str(e)}\n\nTraceback:\n{traceback.format_exc()}",
                 },
                 "warnings": {
                     "non_existing_pkgs": [],
@@ -1675,8 +1700,10 @@ class Analyzer:
             }
             queue_result.put(workload)
             # Log error to stderr so it appears in logs
-            err_log(f" ERROR analyzing workload {workload_conf['id']}:{env_conf['id']}:{repo['id']}:{arch}-> {e}", file=sys.stderr)
-
+            err_log(
+                f" ERROR analyzing workload {workload_conf['id']}:{env_conf['id']}:{repo['id']}:{arch}-> {e}",
+                file=sys.stderr,
+            )
 
     async def _analyze_workloads_subset_async(self, task_queue, results):
 
@@ -1703,7 +1730,11 @@ class Analyzer:
             log("")
 
             queue_result = multiprocessing.Queue()
-            process = multiprocessing.Process(target=self._analyze_workload_process, args=(queue_result, workload_conf, env_conf, repo, arch), daemon=True)
+            process = multiprocessing.Process(
+                target=self._analyze_workload_process,
+                args=(queue_result, workload_conf, env_conf, repo, arch),
+                daemon=True,
+            )
             process.start()
 
             # Now wait a bit for the result.
@@ -1769,7 +1800,7 @@ class Analyzer:
                     "errors": {
                         "non_existing_pkgs": [],
                         "non_existing_placeholder_deps": [],
-                        "message": f"Workload analysis timed out after 222 seconds or subprocess crashed",
+                        "message": "Workload analysis timed out after 222 seconds or subprocess crashed",
                     },
                     "warnings": {
                         "non_existing_pkgs": [],
@@ -1810,9 +1841,9 @@ class Analyzer:
 
         workload_task = {
             "workload_conf": workload_conf,
-            "env_conf" : env_conf,
-            "repo" : repo,
-            "arch" : arch
+            "env_conf": env_conf,
+            "repo": repo,
+            "arch": arch,
         }
 
         self.workload_queue[repo_id][arch].append(workload_task)
@@ -1881,7 +1912,9 @@ class Analyzer:
 
                         else:
                             workload_id = f"{workload_conf_id}:{env_conf_id}:{repo_id}:{arch}"
-                            self.data["workloads"][workload_id] = self._return_failed_workload_env_err(workload_conf, env_conf, repo, arch)
+                            self.data["workloads"][workload_id] = self._return_failed_workload_env_err(
+                                workload_conf, env_conf, repo, arch
+                            )
 
         asyncio.run(self._analyze_workloads_async(self.data["workloads"]))
 
@@ -1901,7 +1934,7 @@ class Analyzer:
                 "q_arch": input_pkg,
                 "reponame": "n/a",
                 "all_reponames": set(),
-                "highest_priority_reponames": set()
+                "highest_priority_reponames": set(),
             }
 
         else:
@@ -1927,22 +1960,26 @@ class Analyzer:
         pkg["level"] = []
 
         # Level 0 is runtime
-        pkg["level"].append({
-            "all": pkg["in_workload_ids_all"],
-            "req": pkg["in_workload_ids_req"],
-            "dep": pkg["in_workload_ids_dep"],
-            "env": pkg["in_workload_ids_env"],
-        })
+        pkg["level"].append(
+            {
+                "all": pkg["in_workload_ids_all"],
+                "req": pkg["in_workload_ids_req"],
+                "dep": pkg["in_workload_ids_dep"],
+                "env": pkg["in_workload_ids_env"],
+            }
+        )
 
         # FIXME: Use comprehension & extend instead on for loop
         # Level 1 and higher is buildroot
         for _ in range(level):
-            pkg["level"].append({
-                "all": set(),
-                "req": set(),
-                "dep": set(),
-                "env": set()
-            })
+            pkg["level"].append(
+                {
+                    "all": set(),
+                    "req": set(),
+                    "dep": set(),
+                    "env": set(),
+                }
+            )
 
         pkg["required_by"] = set()
         pkg["recommended_by"] = set()
@@ -1980,21 +2017,25 @@ class Analyzer:
         srpm["level"] = []
 
         # Level 0 is runtime
-        srpm["level"].append({
-            "all": srpm["in_workload_ids_all"],
-            "req": srpm["in_workload_ids_req"],
-            "dep": srpm["in_workload_ids_dep"],
-            "env": srpm["in_workload_ids_env"],
-        })
+        srpm["level"].append(
+            {
+                "all": srpm["in_workload_ids_all"],
+                "req": srpm["in_workload_ids_req"],
+                "dep": srpm["in_workload_ids_dep"],
+                "env": srpm["in_workload_ids_env"],
+            }
+        )
 
         # Level 1 and higher is buildroot
         for _ in range(level):
-            srpm["level"].append({
-                "all": set(),
-                "req": set(),
-                "dep": set(),
-                "env": set()
-            })
+            srpm["level"].append(
+                {
+                    "all": set(),
+                    "req": set(),
+                    "dep": set(),
+                    "env": set(),
+                }
+            )
 
         return srpm
 
@@ -2036,7 +2077,7 @@ class Analyzer:
         # Packages
         log(f"  Processing packages from {len(view['workload_ids'])} workloads...")
         workload_counter = 0
-        total_workloads = len(view['workload_ids'])
+        total_workloads = len(view["workload_ids"])
 
         for workload_id in view["workload_ids"]:
             workload_counter += 1
@@ -2118,13 +2159,21 @@ class Analyzer:
                 # Initialise
                 if srpm_id not in view["source_pkgs"]:
                     sourcerpm = f"{srpm_id}.src.rpm"
-                    view["source_pkgs"][srpm_id] = self._init_view_srpm({"sourcerpm": sourcerpm, "source_name": srpm_name, "reponame": None})
+                    view["source_pkgs"][srpm_id] = self._init_view_srpm(
+                        {
+                            "sourcerpm": sourcerpm,
+                            "source_name": srpm_name,
+                            "reponame": None,
+                        }
+                    )
 
                 # It's a placeholder
                 view["source_pkgs"][srpm_id]["placeholder"] = True
 
                 # Build requires
-                view["source_pkgs"][srpm_id]["placeholder_directly_required_pkg_names"] = workload_conf["package_placeholders"]["srpms"][srpm_name]["buildrequires"]
+                view["source_pkgs"][srpm_id]["placeholder_directly_required_pkg_names"] = workload_conf[
+                    "package_placeholders"
+                ]["srpms"][srpm_name]["buildrequires"]
 
         # If this is an addon view, remove all packages that are already in the parent view
         if view_conf["type"] == "addon":
@@ -2270,15 +2319,21 @@ class Analyzer:
                     if srpm_id not in self.data["buildroot"]["koji_srpms"][koji_id][arch]:
                         self.data["buildroot"]["koji_srpms"][koji_id][arch][srpm_id] = {}
                         self.data["buildroot"]["koji_srpms"][koji_id][arch][srpm_id]["id"] = srpm_id
-                        self.data["buildroot"]["koji_srpms"][koji_id][arch][srpm_id]["directly_required_pkg_names"] = directly_required_pkg_names
+                        self.data["buildroot"]["koji_srpms"][koji_id][arch][srpm_id]["directly_required_pkg_names"] = (
+                            directly_required_pkg_names
+                        )
                     else:
-                        directly_required_pkg_names = self.data["buildroot"]["koji_srpms"][koji_id][arch][srpm_id]["directly_required_pkg_names"]
+                        directly_required_pkg_names = self.data["buildroot"]["koji_srpms"][koji_id][arch][srpm_id][
+                            "directly_required_pkg_names"
+                        ]
 
             # Initialise srpms in the srpms section
             if srpm_id not in self.data["buildroot"]["srpms"][repo_id][arch]:
                 self.data["buildroot"]["srpms"][repo_id][arch][srpm_id] = {}
                 self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["id"] = srpm_id
-                self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["directly_required_pkg_names"] = directly_required_pkg_names
+                self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["directly_required_pkg_names"] = (
+                    directly_required_pkg_names
+                )
                 self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["pkg_relations"] = {}
                 self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["pkg_env_ids"] = set()
                 self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["pkg_added_ids"] = set()
@@ -2340,14 +2395,16 @@ class Analyzer:
                         continue
 
                     # Add to work queue
-                    work_items.append({
-                        "koji_id": koji_id,
-                        "koji_api_url": koji_urls["api"],
-                        "koji_files_url": koji_urls["files"],
-                        "srpm_id": srpm_id,
-                        "arch": arch,
-                        "dev_buildroot": self.settings.get("dev_buildroot", False),
-                    })
+                    work_items.append(
+                        {
+                            "koji_id": koji_id,
+                            "koji_api_url": koji_urls["api"],
+                            "koji_files_url": koji_urls["files"],
+                            "srpm_id": srpm_id,
+                            "arch": arch,
+                            "dev_buildroot": self.settings.get("dev_buildroot", False),
+                        }
+                    )
 
         if not work_items:
             log("All SRPMs already cached or processed!")
@@ -2365,10 +2422,7 @@ class Analyzer:
 
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
             # Submit all jobs
-            future_to_item = {
-                executor.submit(process_single_srpm_root_log, item): item
-                for item in work_items
-            }
+            future_to_item = {executor.submit(process_single_srpm_root_log, item): item for item in work_items}
 
             # Collect results as they complete
             completed_count = 0
@@ -2382,37 +2436,49 @@ class Analyzer:
                     result = future.result()
                     self._apply_srpm_result(work_item, result)
 
-                    if result['error']:
-                        log(f"[ Buildroot - pass {pass_counter} - {completed_count} of {total_count} ] "
-                            f"Failed {result['srpm_id']} {result['arch']}: {result['error']}")
-                        failed_downloads.append({
-                            'srpm_id': result['srpm_id'],
-                            'arch': result['arch'],
-                            'error': result['error']
-                        })
+                    if result["error"]:
+                        log(
+                            f"[ Buildroot - pass {pass_counter} - {completed_count} of {total_count} ] "
+                            f"Failed {result['srpm_id']} {result['arch']}: {result['error']}"
+                        )
+                        failed_downloads.append(
+                            {
+                                "srpm_id": result["srpm_id"],
+                                "arch": result["arch"],
+                                "error": result["error"],
+                            }
+                        )
                     else:
                         # Log completion with warning if present
-                        deps_count = len(result['deps'])
-                        warning_msg = result.get('warning', '')
+                        deps_count = len(result["deps"])
+                        warning_msg = result.get("warning", "")
                         if warning_msg:
-                            log(f"[ Buildroot - pass {pass_counter} - {completed_count} of {total_count} ] "
-                                f"⚠️  {result['srpm_id']} {result['arch']} - {deps_count} deps - {warning_msg}")
+                            log(
+                                f"[ Buildroot - pass {pass_counter} - {completed_count} of {total_count} ] "
+                                f"⚠️  {result['srpm_id']} {result['arch']} - {deps_count} deps - {warning_msg}"
+                            )
                         else:
-                            log(f"[ Buildroot - pass {pass_counter} - {completed_count} of {total_count} ] "
-                                f"Completed {result['srpm_id']} {result['arch']} - found {deps_count} deps")
+                            log(
+                                f"[ Buildroot - pass {pass_counter} - {completed_count} of {total_count} ] "
+                                f"Completed {result['srpm_id']} {result['arch']} - found {deps_count} deps"
+                            )
 
                         # Detect suspicious results
                         if deps_count == 0:
-                            zero_deps.append({
-                                'srpm_id': result['srpm_id'],
-                                'arch': result['arch']
-                            })
+                            zero_deps.append(
+                                {
+                                    "srpm_id": result["srpm_id"],
+                                    "arch": result["arch"],
+                                }
+                            )
                         elif deps_count < 3:
-                            low_deps.append({
-                                'srpm_id': result['srpm_id'],
-                                'arch': result['arch'],
-                                'deps': result['deps']
-                            })
+                            low_deps.append(
+                                {
+                                    "srpm_id": result["srpm_id"],
+                                    "arch": result["arch"],
+                                    "deps": result["deps"],
+                                }
+                            )
 
                 except Exception as e:
                     log(f"Failed to process {work_item['srpm_id']}: {e}")
@@ -2424,11 +2490,13 @@ class Analyzer:
                         "error": str(e),
                     }
                     self._apply_srpm_result(work_item, error_result)
-                    failed_downloads.append({
-                        'srpm_id': work_item["srpm_id"],
-                        'arch': work_item["arch"],
-                        'error': str(e)
-                    })
+                    failed_downloads.append(
+                        {
+                            "srpm_id": work_item["srpm_id"],
+                            "arch": work_item["arch"],
+                            "error": str(e),
+                        }
+                    )
 
         # Save updated cache
         dump_data(self.settings["root_log_deps_cache_path"], self.cache["root_log_deps"]["next"])
@@ -2566,21 +2634,29 @@ class Analyzer:
                         directly_required_pkg_names = set()
 
                         koji_api_url = self.configs["repos"][repo_id]["source"]["repos"][srpm_reponame]["koji_api_url"]
-                        koji_files_url = self.configs["repos"][repo_id]["source"]["repos"][srpm_reponame]["koji_files_url"]
+                        koji_files_url = self.configs["repos"][repo_id]["source"]["repos"][srpm_reponame][
+                            "koji_files_url"
+                        ]
                         koji_id = url_to_id(koji_api_url)
 
                         # Initialise the srpm in the koji_srpms section
                         if srpm_id not in self.data["buildroot"]["koji_srpms"][koji_id][arch]:
                             self.data["buildroot"]["koji_srpms"][koji_id][arch][srpm_id] = {}
                             self.data["buildroot"]["koji_srpms"][koji_id][arch][srpm_id]["id"] = srpm_id
-                            self.data["buildroot"]["koji_srpms"][koji_id][arch][srpm_id]["directly_required_pkg_names"] = directly_required_pkg_names
+                            self.data["buildroot"]["koji_srpms"][koji_id][arch][srpm_id][
+                                "directly_required_pkg_names"
+                            ] = directly_required_pkg_names
                         else:
-                            directly_required_pkg_names = self.data["buildroot"]["koji_srpms"][koji_id][arch][srpm_id]["directly_required_pkg_names"]
+                            directly_required_pkg_names = self.data["buildroot"]["koji_srpms"][koji_id][arch][srpm_id][
+                                "directly_required_pkg_names"
+                            ]
 
                         # Initialise the srpm in the srpms section
                         self.data["buildroot"]["srpms"][repo_id][arch][srpm_id] = {}
                         self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["id"] = srpm_id
-                        self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["directly_required_pkg_names"] = directly_required_pkg_names
+                        self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["directly_required_pkg_names"] = (
+                            directly_required_pkg_names
+                        )
                         self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["pkg_relations"] = {}
                         self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["pkg_env_ids"] = set()
                         self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["pkg_added_ids"] = set()
@@ -2662,15 +2738,25 @@ class Analyzer:
                     if srpm["processed"]:
                         continue
 
-                    fake_workload_id = f"{srpm_id}:{self.data['buildroot']['build_groups'][repo_id][arch]['generated_id']}:{repo_id}:{arch}"
+                    fake_workload_id = (
+                        f"{srpm_id}:"
+                        f"{self.data['buildroot']['build_groups'][repo_id][arch]['generated_id']}:"
+                        f"{repo_id}:{arch}"
+                    )
 
                     fake_workload = fake_workload_results[fake_workload_id]
 
                     # Save the buildroot data
                     self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["succeeded"] = fake_workload["succeeded"]
-                    self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["pkg_relations"] = fake_workload["pkg_relations"]
-                    self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["pkg_env_ids"] = fake_workload["pkg_env_ids"]
-                    self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["pkg_added_ids"] = fake_workload["pkg_added_ids"]
+                    self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["pkg_relations"] = fake_workload[
+                        "pkg_relations"
+                    ]
+                    self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["pkg_env_ids"] = fake_workload[
+                        "pkg_env_ids"
+                    ]
+                    self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["pkg_added_ids"] = fake_workload[
+                        "pkg_added_ids"
+                    ]
                     self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["errors"] = fake_workload["errors"]
                     self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["warnings"] = fake_workload["warnings"]
                     self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["processed"] = True
@@ -2754,13 +2840,14 @@ class Analyzer:
         """Add missing level entries to reach the target level."""
         pkg_current_max_level = len(pkg_or_srpm["level"]) - 1
         for _ in range(level - pkg_current_max_level):
-            pkg_or_srpm["level"].append({
-                "all": set(),
-                "req": set(),
-                "dep": set(),
-                "env": set()
-            })
-
+            pkg_or_srpm["level"].append(
+                {
+                    "all": set(),
+                    "req": set(),
+                    "dep": set(),
+                    "env": set(),
+                }
+            )
 
     def _add_buildroot_to_view(self, view_conf, arch):
 
@@ -2819,7 +2906,9 @@ class Analyzer:
 
                     # pkg_relations
                     view["pkgs"][pkg_id]["required_by"].update(buildroot_srpm["pkg_relations"][pkg_id]["required_by"])
-                    view["pkgs"][pkg_id]["recommended_by"].update(buildroot_srpm["pkg_relations"][pkg_id]["recommended_by"])
+                    view["pkgs"][pkg_id]["recommended_by"].update(
+                        buildroot_srpm["pkg_relations"][pkg_id]["recommended_by"]
+                    )
                     view["pkgs"][pkg_id]["suggested_by"].update(buildroot_srpm["pkg_relations"][pkg_id]["suggested_by"])
                     view["pkgs"][pkg_id]["supplements"].update(buildroot_srpm["pkg_relations"][pkg_id]["supplements"])
 
@@ -2851,7 +2940,9 @@ class Analyzer:
 
                     # pkg_relations
                     view["pkgs"][pkg_id]["required_by"].update(buildroot_srpm["pkg_relations"][pkg_id]["required_by"])
-                    view["pkgs"][pkg_id]["recommended_by"].update(buildroot_srpm["pkg_relations"][pkg_id]["recommended_by"])
+                    view["pkgs"][pkg_id]["recommended_by"].update(
+                        buildroot_srpm["pkg_relations"][pkg_id]["recommended_by"]
+                    )
                     view["pkgs"][pkg_id]["suggested_by"].update(buildroot_srpm["pkg_relations"][pkg_id]["suggested_by"])
                     view["pkgs"][pkg_id]["supplements"].update(buildroot_srpm["pkg_relations"][pkg_id]["supplements"])
 
@@ -2963,10 +3054,10 @@ class Analyzer:
             target_pkg["reverse_weak_dependency_of_pkg_nevrs"] = set()
 
             # Dependency of RPM Names
-            target_pkg["dependency_of_pkg_names"] = {} # of set() of nevrs
-            target_pkg["hard_dependency_of_pkg_names"] = {} # of set() of nevrs
-            target_pkg["weak_dependency_of_pkg_names"] = {} # if set() of nevrs
-            target_pkg["reverse_weak_dependency_of_pkg_names"] = {} # if set() of nevrs
+            target_pkg["dependency_of_pkg_names"] = {}
+            target_pkg["hard_dependency_of_pkg_names"] = {}
+            target_pkg["weak_dependency_of_pkg_names"] = {}
+            target_pkg["reverse_weak_dependency_of_pkg_names"] = {}
 
     def _populate_pkg_or_srpm_relations_fields(self, target_pkg, source_pkg, type=None, view=None):
 
@@ -2988,7 +3079,9 @@ class Analyzer:
         for list_type in ["all", "req", "dep", "env"]:
             target_pkg[f"in_workload_ids_{list_type}"].update(source_pkg[f"in_workload_ids_{list_type}"])
 
-            target_pkg[f"in_buildroot_of_srpm_id_{list_type}"].update(source_pkg[f"in_buildroot_of_srpm_id_{list_type}"])
+            target_pkg[f"in_buildroot_of_srpm_id_{list_type}"].update(
+                source_pkg[f"in_buildroot_of_srpm_id_{list_type}"]
+            )
 
             for workload_id in source_pkg[f"in_workload_ids_{list_type}"]:
                 workload_conf_id = workload_id_to_conf_id(workload_id)
@@ -3236,9 +3329,13 @@ class Analyzer:
 
                         if arch not in view_all_arches[key][identifier]["highest_priority_reponames_per_arch"]:
                             view_all_arches[key][identifier]["highest_priority_reponames_per_arch"][arch] = set()
-                        view_all_arches[key][identifier]["highest_priority_reponames_per_arch"][arch].update(package["highest_priority_reponames"])
+                        view_all_arches[key][identifier]["highest_priority_reponames_per_arch"][arch].update(
+                            package["highest_priority_reponames"]
+                        )
 
-                        self._populate_pkg_or_srpm_relations_fields(view_all_arches[key][identifier], package, type="rpm", view=view)
+                        self._populate_pkg_or_srpm_relations_fields(
+                            view_all_arches[key][identifier], package, type="rpm", view=view
+                        )
 
                         # Binary Packages by nevr
                         key = "pkgs_by_nevr"
@@ -3260,14 +3357,17 @@ class Analyzer:
 
                         view_all_arches[key][identifier]["arches"].add(arch)
                         view_all_arches[key][identifier]["reponame_per_arch"][arch] = package["reponame"]
-                        view_all_arches[key][identifier]["highest_priority_reponames_per_arch"][arch] = package["highest_priority_reponames"]
+                        view_all_arches[key][identifier]["highest_priority_reponames_per_arch"][arch] = package[
+                            "highest_priority_reponames"
+                        ]
 
                         if arch not in view_all_arches[key][identifier]["arches_arches"]:
                             view_all_arches[key][identifier]["arches_arches"][arch] = set()
                         view_all_arches[key][identifier]["arches_arches"][arch].add(package["arch"])
 
-                        self._populate_pkg_or_srpm_relations_fields(view_all_arches[key][identifier], package, type="rpm", view=view)
-
+                        self._populate_pkg_or_srpm_relations_fields(
+                            view_all_arches[key][identifier], package, type="rpm", view=view
+                        )
 
                     # Source Packages
                     for package in view["source_pkgs"].values():
@@ -3295,16 +3395,21 @@ class Analyzer:
                             if not self.data["buildroot"]["srpms"][repo_id][arch][package["id"]]["succeeded"]:
                                 view_all_arches["everything_succeeded"] = False
                                 view_all_arches[key][identifier]["buildroot_succeeded"] = False
-                                view_all_arches[key][identifier]["errors"][arch] = self.data["buildroot"]["srpms"][repo_id][arch][package["id"]]["errors"]
+                                view_all_arches[key][identifier]["errors"][arch] = self.data["buildroot"]["srpms"][
+                                    repo_id
+                                ][arch][package["id"]]["errors"]
                             if self.data["buildroot"]["srpms"][repo_id][arch][package["id"]]["warnings"]["message"]:
                                 view_all_arches["no_warnings"] = False
                                 view_all_arches[key][identifier]["buildroot_no_warnings"] = False
-                                view_all_arches[key][identifier]["warnings"][arch] = self.data["buildroot"]["srpms"][repo_id][arch][package["id"]]["warnings"]
+                                view_all_arches[key][identifier]["warnings"][arch] = self.data["buildroot"]["srpms"][
+                                    repo_id
+                                ][arch][package["id"]]["warnings"]
 
                         view_all_arches[key][identifier]["arches"].add(arch)
 
-                        self._populate_pkg_or_srpm_relations_fields(view_all_arches[key][identifier], package, type="srpm")
-
+                        self._populate_pkg_or_srpm_relations_fields(
+                            view_all_arches[key][identifier], package, type="srpm"
+                        )
 
                     # Add binary packages to source packages
                     for pkg_id, pkg in view["pkgs"].items():
@@ -3337,14 +3442,16 @@ class Analyzer:
                     if category is not None:
                         view_all_arches["numbers"]["pkgs"][category] += 1
 
-                view_all_arches["numbers"]["pkgs"]["runtime"] = \
-                    view_all_arches["numbers"]["pkgs"]["env"] + \
-                    view_all_arches["numbers"]["pkgs"]["req"] + \
-                    view_all_arches["numbers"]["pkgs"]["dep"]
-                view_all_arches["numbers"]["pkgs"]["build"] = \
-                    view_all_arches["numbers"]["pkgs"]["build_base"] + \
-                    view_all_arches["numbers"]["pkgs"]["build_level_1"] + \
-                    view_all_arches["numbers"]["pkgs"]["build_level_2_plus"]
+                view_all_arches["numbers"]["pkgs"]["runtime"] = (
+                    view_all_arches["numbers"]["pkgs"]["env"]
+                    + view_all_arches["numbers"]["pkgs"]["req"]
+                    + view_all_arches["numbers"]["pkgs"]["dep"]
+                )
+                view_all_arches["numbers"]["pkgs"]["build"] = (
+                    view_all_arches["numbers"]["pkgs"]["build_base"]
+                    + view_all_arches["numbers"]["pkgs"]["build_level_1"]
+                    + view_all_arches["numbers"]["pkgs"]["build_level_2_plus"]
+                )
 
                 # SRPMs
                 for pkg in view_all_arches["source_pkgs_by_name"].values():
@@ -3366,15 +3473,17 @@ class Analyzer:
                     if category is not None:
                         view_all_arches["numbers"]["srpms"][category] += 1
 
-                view_all_arches["numbers"]["srpms"]["runtime"] = \
-                    view_all_arches["numbers"]["srpms"]["env"] + \
-                    view_all_arches["numbers"]["srpms"]["req"] + \
-                    view_all_arches["numbers"]["srpms"]["dep"]
+                view_all_arches["numbers"]["srpms"]["runtime"] = (
+                    view_all_arches["numbers"]["srpms"]["env"]
+                    + view_all_arches["numbers"]["srpms"]["req"]
+                    + view_all_arches["numbers"]["srpms"]["dep"]
+                )
 
-                view_all_arches["numbers"]["srpms"]["build"] = \
-                    view_all_arches["numbers"]["srpms"]["build_base"] + \
-                    view_all_arches["numbers"]["srpms"]["build_level_1"] + \
-                    view_all_arches["numbers"]["srpms"]["build_level_2_plus"]
+                view_all_arches["numbers"]["srpms"]["build"] = (
+                    view_all_arches["numbers"]["srpms"]["build_base"]
+                    + view_all_arches["numbers"]["srpms"]["build_level_1"]
+                    + view_all_arches["numbers"]["srpms"]["build_level_2_plus"]
+                )
 
                 # Done
                 views_all_arches[view_conf_id] = view_all_arches
@@ -3528,24 +3637,40 @@ class Analyzer:
                     # 1/  maintainer_recommendation
 
                     if workload_maintainer not in pkg["maintainer_recommendation"]:
-                        self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation"][workload_maintainer] = set()
+                        self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name][
+                            "maintainer_recommendation"
+                        ][workload_maintainer] = set()
 
-                    self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation"][workload_maintainer].add(score)
+                    self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation"][
+                        workload_maintainer
+                    ].add(score)
 
                     # 2/  maintainer_recommendation_details
 
                     if level not in pkg["maintainer_recommendation_details"]:
-                        self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level] = {}
+                        self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name][
+                            "maintainer_recommendation_details"
+                        ][level] = {}
 
                     if sublevel not in pkg["maintainer_recommendation_details"][level]:
-                        self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level][sublevel] = {}
+                        self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name][
+                            "maintainer_recommendation_details"
+                        ][level][sublevel] = {}
 
                     if workload_maintainer not in pkg["maintainer_recommendation_details"][level][sublevel]:
-                        self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level][sublevel][workload_maintainer] = {}
-                        self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level][sublevel][workload_maintainer]["reasons"] = set()
-                        self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level][sublevel][workload_maintainer]["locations"] = set()
+                        self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name][
+                            "maintainer_recommendation_details"
+                        ][level][sublevel][workload_maintainer] = {}
+                        self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name][
+                            "maintainer_recommendation_details"
+                        ][level][sublevel][workload_maintainer]["reasons"] = set()
+                        self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name][
+                            "maintainer_recommendation_details"
+                        ][level][sublevel][workload_maintainer]["locations"] = set()
 
-                    self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level][sublevel][workload_maintainer]["locations"].add(workload_conf_id)
+                    self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name][
+                        "maintainer_recommendation_details"
+                    ][level][sublevel][workload_maintainer]["locations"].add(workload_conf_id)
 
             # Lie to the while loop so it runs at least once
             level_changes_made = True
@@ -3576,20 +3701,29 @@ class Analyzer:
 
                             # But limit this to only the ones with the highest score.
                             all_the_previous_sublevels_of_this_buildroot_srpm = set()
-                            for buildroot_srpm_maintainer, buildroot_srpm_maintainer_scores in buildroot_srpm["maintainer_recommendation"].items():
+                            for buildroot_srpm_maintainer, buildroot_srpm_maintainer_scores in buildroot_srpm[
+                                "maintainer_recommendation"
+                            ].items():
                                 for buildroot_srpm_maintainer_score in buildroot_srpm_maintainer_scores:
-                                    buildroot_srpm_maintainer_score_level, buildroot_srpm_maintainer_score_sublevel = buildroot_srpm_maintainer_score
+                                    buildroot_srpm_maintainer_score_level, buildroot_srpm_maintainer_score_sublevel = (
+                                        buildroot_srpm_maintainer_score
+                                    )
                                     if not buildroot_srpm_maintainer_score_level == prev_level:
                                         continue
-                                    all_the_previous_sublevels_of_this_buildroot_srpm.add(buildroot_srpm_maintainer_score_sublevel)
+                                    all_the_previous_sublevels_of_this_buildroot_srpm.add(
+                                        buildroot_srpm_maintainer_score_sublevel
+                                    )
                             if not all_the_previous_sublevels_of_this_buildroot_srpm:
                                 continue
-                            the_highest_sublevel_of_this_buildroot_srpm = min(all_the_previous_sublevels_of_this_buildroot_srpm)
+                            the_highest_sublevel_of_this_buildroot_srpm = min(
+                                all_the_previous_sublevels_of_this_buildroot_srpm
+                            )
                             the_score_I_care_about = (prev_level, the_highest_sublevel_of_this_buildroot_srpm)
 
-                            for buildroot_srpm_maintainer, buildroot_srpm_maintainer_scores in buildroot_srpm["maintainer_recommendation"].items():
+                            for buildroot_srpm_maintainer, buildroot_srpm_maintainer_scores in buildroot_srpm[
+                                "maintainer_recommendation"
+                            ].items():
                                 if the_score_I_care_about in buildroot_srpm_maintainer_scores:
-
                                     level_change_detection_tuple = (buildroot_srpm_name, pkg_name)
                                     if level_change_detection_tuple not in level_change_detection:
                                         level_changes_made = True
@@ -3598,24 +3732,43 @@ class Analyzer:
                                     # 1/  maintainer_recommendation
 
                                     if buildroot_srpm_maintainer not in pkg["maintainer_recommendation"]:
-                                        self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation"][buildroot_srpm_maintainer] = set()
+                                        self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name][
+                                            "maintainer_recommendation"
+                                        ][buildroot_srpm_maintainer] = set()
 
-                                    self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation"][buildroot_srpm_maintainer].add(score)
+                                    self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name][
+                                        "maintainer_recommendation"
+                                    ][buildroot_srpm_maintainer].add(score)
 
                                     # 2/  maintainer_recommendation_details
 
                                     if level not in pkg["maintainer_recommendation_details"]:
-                                        self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level] = {}
+                                        self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name][
+                                            "maintainer_recommendation_details"
+                                        ][level] = {}
 
                                     if sublevel not in pkg["maintainer_recommendation_details"][level]:
-                                        self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level][sublevel] = {}
+                                        self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name][
+                                            "maintainer_recommendation_details"
+                                        ][level][sublevel] = {}
 
-                                    if buildroot_srpm_maintainer not in pkg["maintainer_recommendation_details"][level][sublevel]:
-                                        self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level][sublevel][buildroot_srpm_maintainer] = {}
-                                        self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level][sublevel][buildroot_srpm_maintainer]["reasons"] = set()
-                                        self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level][sublevel][buildroot_srpm_maintainer]["locations"] = set()
+                                    if (
+                                        buildroot_srpm_maintainer
+                                        not in pkg["maintainer_recommendation_details"][level][sublevel]
+                                    ):
+                                        self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name][
+                                            "maintainer_recommendation_details"
+                                        ][level][sublevel][buildroot_srpm_maintainer] = {}
+                                        self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name][
+                                            "maintainer_recommendation_details"
+                                        ][level][sublevel][buildroot_srpm_maintainer]["reasons"] = set()
+                                        self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name][
+                                            "maintainer_recommendation_details"
+                                        ][level][sublevel][buildroot_srpm_maintainer]["locations"] = set()
 
-                                    self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level][sublevel][buildroot_srpm_maintainer]["locations"].add(buildroot_srpm_name)
+                                    self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name][
+                                        "maintainer_recommendation_details"
+                                    ][level][sublevel][buildroot_srpm_maintainer]["locations"].add(buildroot_srpm_name)
 
                 # Time to look at runtime dependencies!
                 #
@@ -3654,9 +3807,15 @@ class Analyzer:
                             superior_srpm_name = superior_pkg["source_name"]
 
                             # ... and if they're in the previous group, assign their maintainer(s)
-                            for superior_pkg_maintainer, superior_pkg_maintainer_scores in superior_pkg["maintainer_recommendation"].items():
+                            for superior_pkg_maintainer, superior_pkg_maintainer_scores in superior_pkg[
+                                "maintainer_recommendation"
+                            ].items():
                                 if prev_score in superior_pkg_maintainer_scores:
-                                    sublevel_change_detection_tuple = (superior_pkg_name, pkg_name, superior_pkg_maintainer)
+                                    sublevel_change_detection_tuple = (
+                                        superior_pkg_name,
+                                        pkg_name,
+                                        superior_pkg_maintainer,
+                                    )
                                     if sublevel_change_detection_tuple in sublevel_change_detection:
                                         continue
                                     else:
@@ -3666,29 +3825,51 @@ class Analyzer:
                                     # 1/  maintainer_recommendation
 
                                     if superior_pkg_maintainer not in pkg["maintainer_recommendation"]:
-                                        self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation"][superior_pkg_maintainer] = set()
+                                        self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name][
+                                            "maintainer_recommendation"
+                                        ][superior_pkg_maintainer] = set()
 
-                                    self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation"][superior_pkg_maintainer].add(score)
+                                    self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name][
+                                        "maintainer_recommendation"
+                                    ][superior_pkg_maintainer].add(score)
 
                                     # 2/  maintainer_recommendation_details
-
                                     if level not in pkg["maintainer_recommendation_details"]:
-                                        self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level] = {}
+                                        self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name][
+                                            "maintainer_recommendation_details"
+                                        ][level] = {}
 
                                     if sublevel not in pkg["maintainer_recommendation_details"][level]:
-                                        self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level][sublevel] = {}
+                                        self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name][
+                                            "maintainer_recommendation_details"
+                                        ][level][sublevel] = {}
 
-                                    if superior_pkg_maintainer not in pkg["maintainer_recommendation_details"][level][sublevel]:
-                                        self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level][sublevel][superior_pkg_maintainer] = {}
-                                        self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level][sublevel][superior_pkg_maintainer]["reasons"] = set()
-                                        self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level][sublevel][superior_pkg_maintainer]["locations"] = set()
+                                    if (
+                                        superior_pkg_maintainer
+                                        not in pkg["maintainer_recommendation_details"][level][sublevel]
+                                    ):
+                                        self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name][
+                                            "maintainer_recommendation_details"
+                                        ][level][sublevel][superior_pkg_maintainer] = {}
+                                        self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name][
+                                            "maintainer_recommendation_details"
+                                        ][level][sublevel][superior_pkg_maintainer]["reasons"] = set()
+                                        self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name][
+                                            "maintainer_recommendation_details"
+                                        ][level][sublevel][superior_pkg_maintainer]["locations"] = set()
 
                                     # Copy the locations from the superior package one sublevel up
-                                    locations = superior_pkg["maintainer_recommendation_details"][level][prev_sublevel][superior_pkg_maintainer]["locations"]
-                                    self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level][sublevel][superior_pkg_maintainer]["locations"].update(locations)
+                                    locations = superior_pkg["maintainer_recommendation_details"][level][prev_sublevel][
+                                        superior_pkg_maintainer
+                                    ]["locations"]
+                                    self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name][
+                                        "maintainer_recommendation_details"
+                                    ][level][sublevel][superior_pkg_maintainer]["locations"].update(locations)
 
                                     reason = (superior_pkg_name, superior_srpm_name, pkg_name)
-                                    self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name]["maintainer_recommendation_details"][level][sublevel][superior_pkg_maintainer]["reasons"].add(reason)
+                                    self.data["views_all_arches"][view_conf_id]["pkgs_by_name"][pkg_name][
+                                        "maintainer_recommendation_details"
+                                    ][level][sublevel][superior_pkg_maintainer]["reasons"].add(reason)
 
                 # Now add this info to the source packages
                 for pkg_name, pkg in view_all_arches["pkgs_by_name"].items():
@@ -3697,10 +3878,19 @@ class Analyzer:
                     # 1/  maintainer_recommendation
 
                     for maintainer, maintainer_scores in pkg["maintainer_recommendation"].items():
-                        if maintainer not in self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name]["maintainer_recommendation"]:
-                            self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name]["maintainer_recommendation"][maintainer] = set()
+                        if (
+                            maintainer
+                            not in self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name][
+                                "maintainer_recommendation"
+                            ]
+                        ):
+                            self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name][
+                                "maintainer_recommendation"
+                            ][maintainer] = set()
 
-                        self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name]["maintainer_recommendation"][maintainer].update(maintainer_scores)
+                        self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name][
+                            "maintainer_recommendation"
+                        ][maintainer].update(maintainer_scores)
 
                         # Add it here so it's not processed again in the another level
                         this_level_srpms.add(source_name)
@@ -3708,24 +3898,53 @@ class Analyzer:
                     # 2/  maintainer_recommendation_details
 
                     for loop_level, loop_sublevels in pkg["maintainer_recommendation_details"].items():
-                        if loop_level not in self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name]["maintainer_recommendation_details"]:
-                            self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name]["maintainer_recommendation_details"][loop_level] = {}
+                        if (
+                            loop_level
+                            not in self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name][
+                                "maintainer_recommendation_details"
+                            ]
+                        ):
+                            self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name][
+                                "maintainer_recommendation_details"
+                            ][loop_level] = {}
 
                         for loop_sublevel, maintainers in loop_sublevels.items():
-                            if loop_sublevel not in self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name]["maintainer_recommendation_details"][loop_level]:
-                                self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name]["maintainer_recommendation_details"][loop_level][loop_sublevel] = {}
+                            if (
+                                loop_sublevel
+                                not in self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name][
+                                    "maintainer_recommendation_details"
+                                ][loop_level]
+                            ):
+                                self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name][
+                                    "maintainer_recommendation_details"
+                                ][loop_level][loop_sublevel] = {}
 
                             for maintainer, maintainer_details in maintainers.items():
-                                if maintainer not in self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name]["maintainer_recommendation_details"][loop_level][loop_sublevel]:
-                                    self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name]["maintainer_recommendation_details"][loop_level][loop_sublevel][maintainer] = {}
-                                    self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name]["maintainer_recommendation_details"][loop_level][loop_sublevel][maintainer]["reasons"] = set()
-                                    self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name]["maintainer_recommendation_details"][loop_level][loop_sublevel][maintainer]["locations"] = set()
+                                if (
+                                    maintainer
+                                    not in self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][
+                                        source_name
+                                    ]["maintainer_recommendation_details"][loop_level][loop_sublevel]
+                                ):
+                                    self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name][
+                                        "maintainer_recommendation_details"
+                                    ][loop_level][loop_sublevel][maintainer] = {}
+                                    self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name][
+                                        "maintainer_recommendation_details"
+                                    ][loop_level][loop_sublevel][maintainer]["reasons"] = set()
+                                    self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name][
+                                        "maintainer_recommendation_details"
+                                    ][loop_level][loop_sublevel][maintainer]["locations"] = set()
 
                                 reasons = maintainer_details["reasons"]
                                 locations = maintainer_details["locations"]
 
-                                self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name]["maintainer_recommendation_details"][loop_level][loop_sublevel][maintainer]["reasons"].update(reasons)
-                                self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name]["maintainer_recommendation_details"][loop_level][loop_sublevel][maintainer]["locations"].update(locations)
+                                self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name][
+                                    "maintainer_recommendation_details"
+                                ][loop_level][loop_sublevel][maintainer]["reasons"].update(reasons)
+                                self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name][
+                                    "maintainer_recommendation_details"
+                                ][loop_level][loop_sublevel][maintainer]["locations"].update(locations)
 
                 # And set stuff for the next level
                 prev_level = level
@@ -3756,18 +3975,25 @@ class Analyzer:
                     sublevel_numbers.add(int(sublevel_string))
                 lowest_sublevel = str(min(sublevel_numbers))
 
-                maintainers_with_the_best_score = set(srpm["maintainer_recommendation_details"][lowest_level][lowest_sublevel].keys())
+                maintainers_with_the_best_score = set(
+                    srpm["maintainer_recommendation_details"][lowest_level][lowest_sublevel].keys()
+                )
 
                 highest_number_of_dependencies = 0
                 best_maintainers = set()
                 for maint in maintainers_with_the_best_score:
-                    # If we're looking at a direct build dependency, count the number of locations == SRPMs that directly need this
+                    # If we're looking at a direct build dependency,
+                    # count the number of locations == SRPMs that directly need this
                     # And in all other cases count the reasons == the number of packages that runtime require
                     # (in case of 0,0 len(reasons) is always 1 as it just says "directly required" so that works fine)
                     if lowest_level_int > 0 and lowest_sublevel == "0":
-                        number_of_dependencies = len(srpm["maintainer_recommendation_details"][lowest_level][lowest_sublevel][maint]["locations"])
+                        number_of_dependencies = len(
+                            srpm["maintainer_recommendation_details"][lowest_level][lowest_sublevel][maint]["locations"]
+                        )
                     else:
-                        number_of_dependencies = len(srpm["maintainer_recommendation_details"][lowest_level][lowest_sublevel][maint]["reasons"])
+                        number_of_dependencies = len(
+                            srpm["maintainer_recommendation_details"][lowest_level][lowest_sublevel][maint]["reasons"]
+                        )
 
                     if number_of_dependencies > highest_number_of_dependencies:
                         highest_number_of_dependencies = number_of_dependencies
@@ -3776,7 +4002,9 @@ class Analyzer:
                     if number_of_dependencies == highest_number_of_dependencies:
                         best_maintainers.add(maint)
 
-                self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name]["best_maintainers"].update(best_maintainers)
+                self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"][source_name][
+                    "best_maintainers"
+                ].update(best_maintainers)
 
         log("")
         log("  DONE!")

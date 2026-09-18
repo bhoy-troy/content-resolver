@@ -110,9 +110,9 @@ def main():
     log("Feedback Pipeline build done!")
     log("=============================")
     log("")
-    log("  Started:       {}".format(time_started))
-    log("  Analysis done: {}".format(time_analysis_time))
-    log("  Finished:      {}".format(time_ended))
+    log(f"  Started:       {time_started}" )
+    log(f"  Analysis done: {time_analysis_time}" )
+    log(f"  Finished:      {time_ended}" )
     log("")
 
 
