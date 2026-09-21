@@ -195,7 +195,7 @@ def _generate_env_json_files(query):
     # == envs
     log("")
     log("Envs:")
-    for env_conf_id, env_conf in query.configs["envs"].items():
+    for env_conf_id in query.configs["envs"].keys():
         # === Config
 
         log("")
@@ -217,8 +217,6 @@ def _generate_env_json_files(query):
         # === Results
 
         for env_id in query.envs(env_conf_id, None, None, list_all=True):
-            env = query.data["envs"][env_id]
-
             log(f"  Results: {env_id}")
 
             # Where to save
@@ -256,7 +254,7 @@ def _generate_workload_json_files(query):
     # == Workloads
     log("")
     log("Workloads:")
-    for workload_conf_id, workload_conf in query.configs["workloads"].items():
+    for workload_conf_id in query.configs["workloads"].keys():
         # === Config
 
         log("")
@@ -278,8 +276,6 @@ def _generate_workload_json_files(query):
         # === Results
 
         for workload_id in query.workloads(workload_conf_id, None, None, None, list_all=True):
-            workload = query.data["workloads"][workload_id]
-
             log(f"  Results: {workload_id}")
 
             # Where to save
@@ -317,7 +313,7 @@ def _generate_view_json_files(query):
         query: Populated :class:`~content_resolver.query.Query` instance.
     """
     log("Generating JSON files for views...")
-    for view_conf_id, view_conf in query.configs["views"].items():
+    for view_conf_id in query.configs["views"].keys():
         view_all_arches = query.data["views_all_arches"][view_conf_id]
 
         # =================================================================

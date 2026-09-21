@@ -794,8 +794,6 @@ class Analyzer:
 
         """
 
-        repo_id = repo["id"]
-
         # Get available variants from composeinfo.json (if configured)
         available_variants = self._get_available_compose_variants(repo, arch)
 
@@ -808,7 +806,7 @@ class Analyzer:
                 log(f"  Skipping {repo_name} on {arch} (not in compose)")
                 continue
 
-            config = base.get_config()
+            config = base.get_config()  # noqa: F841
             repo_sack = base.get_repo_sack()
             additional_repo = repo_sack.create_repo(repo_name)
             repo_config = additional_repo.get_config()
@@ -1735,7 +1733,7 @@ class Analyzer:
                     srpm_placeholders[placeholder_name] = placeholder_data
 
             # Dependencies of package placeholders
-            for placeholder_name, placeholder_data in package_placeholders.items():
+            for placeholder_data in package_placeholders.values():
                 for pkg in placeholder_data["requires"]:
                     # DNF5: Check if package is resolvable (by name or provides) before adding
                     if not is_package_resolvable(base, pkg):
@@ -1871,7 +1869,6 @@ class Analyzer:
 
                 # Real dependency errors that should NOT be filtered
                 has_nothing_provides = "nothing provides" in error_lower
-                has_package_already_installed = "already installed" in error_lower
 
                 # Filter logic: ignore if it's ONLY repo conflicts, no real missing deps
                 is_repo_conflict = has_cannot_install_both or (has_multi_version_conflict and has_conflict_markers)
@@ -2205,7 +2202,7 @@ class Analyzer:
                         workload_env_map[workload_conf_id].add(env_conf_id)
 
         # And now, look at all workload configs...
-        for workload_conf_id, workload_conf in self.configs["workloads"].items():
+        for workload_conf_id in self.configs["workloads"].keys():
             # ... and for each, look at all env configs it should be analyzed in.
             for env_conf_id in workload_env_map[workload_conf_id]:
                 # Each of those envs can have multiple repos associated...
@@ -2213,7 +2210,6 @@ class Analyzer:
                 for repo_id in env_conf["repositories"]:
                     # ... and each repo probably has multiple architecture.
                     repo = self.configs["repos"][repo_id]
-                    arches = repo["source"]["architectures"]
 
         # And now, look at all workload configs...
         for workload_conf_id, workload_conf in self.configs["workloads"].items():
@@ -3091,9 +3087,6 @@ class Analyzer:
                         directly_required_pkg_names = set()
 
                         koji_api_url = self.configs["repos"][repo_id]["source"]["repos"][srpm_reponame]["koji_api_url"]
-                        koji_files_url = self.configs["repos"][repo_id]["source"]["repos"][srpm_reponame][
-                            "koji_files_url"
-                        ]
                         koji_id = url_to_id(koji_api_url)
 
                         # Initialise the srpm in the koji_srpms section
@@ -3158,7 +3151,7 @@ class Analyzer:
         total_srpms_to_resolve = 0
         for repo_id in self.data["buildroot"]["srpms"]:
             for arch in self.data["buildroot"]["srpms"][repo_id]:
-                for srpm_id, srpm in self.data["buildroot"]["srpms"][repo_id][arch].items():
+                for srpm in self.data["buildroot"]["srpms"][repo_id][arch].values():
                     if srpm["processed"]:
                         continue
                     total_srpms_to_resolve += 1
@@ -3957,7 +3950,7 @@ class Analyzer:
                         )
 
                     # Add binary packages to source packages
-                    for pkg_id, pkg in view["pkgs"].items():
+                    for pkg in view["pkgs"].values():
                         source_name = pkg["source_name"]
 
                         # Add package names
@@ -4058,9 +4051,7 @@ class Analyzer:
                         unwanted_conf_ids.add(unwanted_conf_id)
 
         # Dicts
-        pkgs_unwanted_buildroot = {}
         pkgs_unwanted_completely = {}
-        srpms_unwanted_buildroot = {}
         srpms_unwanted_completely = {}
 
         # Populate the dicts
@@ -4283,9 +4274,9 @@ class Analyzer:
 
                             # But limit this to only the ones with the highest score.
                             all_the_previous_sublevels_of_this_buildroot_srpm = set()
-                            for buildroot_srpm_maintainer, buildroot_srpm_maintainer_scores in buildroot_srpm[
+                            for buildroot_srpm_maintainer_scores in buildroot_srpm[
                                 "maintainer_recommendation"
-                            ].items():
+                            ].values():
                                 for buildroot_srpm_maintainer_score in buildroot_srpm_maintainer_scores:
                                     buildroot_srpm_maintainer_score_level, buildroot_srpm_maintainer_score_sublevel = (
                                         buildroot_srpm_maintainer_score
@@ -4454,7 +4445,7 @@ class Analyzer:
                                     ][level][sublevel][superior_pkg_maintainer]["reasons"].add(reason)
 
                 # Now add this info to the source packages
-                for pkg_name, pkg in view_all_arches["pkgs_by_name"].items():
+                for pkg in view_all_arches["pkgs_by_name"].values():
                     source_name = pkg["source_name"]
 
                     # 1/  maintainer_recommendation

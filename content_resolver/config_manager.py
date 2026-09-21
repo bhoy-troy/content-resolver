@@ -1315,7 +1315,7 @@ class ConfigManager:
                 configs["views"][view_conf_id]["architectures"] = configs["views"][base_view_id]["architectures"]
 
         # Adjust view architecture based on repository architectures
-        for view_conf_id, view_conf in configs["views"].items():
+        for view_conf in configs["views"].values():
             if view_conf["type"] == "compose":
                 if not len(view_conf["architectures"]):
                     view_conf["architectures"] = self.settings["allowed_arches"]
@@ -1327,7 +1327,7 @@ class ConfigManager:
                 view_conf["architectures"] = sorted(list(actual_arches))
 
         # Adjust addon view architecture based on its base view architectures
-        for view_conf_id, view_conf in configs["views"].items():
+        for view_conf in configs["views"].values():
             if view_conf["type"] == "addon":
                 if not len(view_conf["architectures"]):
                     view_conf["architectures"] = self.settings["allowed_arches"]

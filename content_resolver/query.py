@@ -265,7 +265,6 @@ class Query:
 
         # It's a workload!
         if len(id_components) == 4:
-            workload_conf_id = id_components[0]
             env_conf_id = id_components[1]
             repo_id = id_components[2]
             arch = id_components[3]
@@ -309,7 +308,6 @@ class Query:
             ValueError: If ``output_change`` is not a recognised value.
         """
         if output_change:
-            list_all = True
             if output_change not in ["ids", "binary_names", "source_nvr", "source_names"]:
                 raise ValueError('output_change must be one of: "ids", "binary_names", "source_nvr", "source_names"')
 
@@ -595,7 +593,6 @@ class Query:
 
         # It's a workload!
         if len(id_components) == 4:
-            workload_conf_id = id_components[0]
             env_conf_id = id_components[1]
             repo_id = id_components[2]
             arch = id_components[3]
@@ -693,7 +690,6 @@ class Query:
 
         # It's a workload!
         if len(id_components) == 4:
-            workload_conf_id = id_components[0]
             env_conf_id = id_components[1]
             repo_id = id_components[2]
             arch = id_components[3]
@@ -877,7 +873,6 @@ class Query:
             ValueError: If ``output_change`` is not a recognised value.
         """
         if output_change:
-            list_all = True
             if output_change not in ["ids", "nevrs", "binary_names", "source_nvr", "source_names"]:
                 raise ValueError(
                     'output_change must be one of: "ids", "nevrs", "binary_names", "source_nvr", "source_names"'
@@ -1106,9 +1101,7 @@ class Query:
                     }
                 pkgs[pkg_name]["required_by"].add(srpm_name)
 
-        for buildroot_pkg_relations_conf_id, buildroot_pkg_relations_conf in self.configs[
-            "buildroot_pkg_relations"
-        ].items():
+        for buildroot_pkg_relations_conf in self.configs["buildroot_pkg_relations"].values():
             if view_conf_id != buildroot_pkg_relations_conf["view_id"]:
                 continue
 
@@ -1127,7 +1120,7 @@ class Query:
         if output_change == "source_names":
             srpms = set()
 
-            for pkg_name, pkg in pkgs.items():
+            for pkg in pkgs.values():
                 if pkg["srpm_name"]:
                     srpms.add(pkg["srpm_name"])
 
