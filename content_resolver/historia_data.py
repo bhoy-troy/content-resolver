@@ -92,7 +92,7 @@ def _save_current_historic_data(query):
             "srpm_count_dep": view_all_arches["numbers"]["srpms"]["dep"],
         }
         if view_all_arches["has_buildroot"]:
-            history_data["views"][view_conf_id].extend(
+            history_data["views"][view_conf_id].update(
                 {
                     "srpm_count_build_base": view_all_arches["numbers"]["srpms"]["build_base"],
                     "srpm_count_build_level_1": view_all_arches["numbers"]["srpms"]["build_level_1"],
@@ -141,7 +141,7 @@ def _read_historic_data(query):
     historic_data = {}
 
     for filename in valid_filenames:
-        with open(os.path.join(directory, filename), "r") as file:
+        with open(os.path.join(directory, filename)) as file:
             try:
                 document = json.load(file)
 

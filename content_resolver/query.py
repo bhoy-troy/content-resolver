@@ -129,7 +129,7 @@ class Query:
 
         if not list_all:
             return False
-        return sorted(list(matching_ids))
+        return sorted(matching_ids)
 
     @cache
     def workloads_id(self, workload_id, list_all=False, output_change=None):
@@ -436,7 +436,7 @@ class Query:
                         }
                         pkg_names.add(output_map.get(output_change))
 
-            return sorted(list(pkg_names))
+            return sorted(pkg_names)
 
         # And now I just need to flatten that dict and return all packages as a list
         final_pkg_list = []
@@ -816,7 +816,7 @@ class Query:
                 if workload_label in labels:
                     final_workload_ids.add(workload_id)
 
-        return sorted(list(final_workload_ids))
+        return sorted(final_workload_ids)
 
     @cache
     def arches_in_view(self, view_conf_id, maintainer=None):
@@ -1032,11 +1032,11 @@ class Query:
                 }
                 pkg_names.add(output_map.get(output_change))
 
-            return sorted(list(pkg_names))
+            return sorted(pkg_names)
 
         # And now I just need to flatten that dict and return all packages as a list
         # And sort them by nevr which is their ID
-        return sorted(list(pkgs.values()), key=lambda k: k["id"])
+        return sorted(pkgs.values(), key=lambda k: k["id"])
 
     @cache
     def view_buildroot_pkgs(self, view_conf_id, arch, output_change=None, maintainer=None):
@@ -1124,8 +1124,7 @@ class Query:
                 if pkg["srpm_name"]:
                     srpms.add(pkg["srpm_name"])
 
-            srpm_names_sorted = sorted(list(srpms))
-            return srpm_names_sorted
+            return sorted(srpms)
 
         return pkgs
 

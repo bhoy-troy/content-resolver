@@ -1234,6 +1234,7 @@ class Analyzer:
             "repo_id": repo["id"],
             "arch": arch,
             "pkg_relations": [],
+            "succeeded": True,
             "errors": {
                 "non_existing_pkgs": [],
                 "succeeded": True,
@@ -4253,6 +4254,7 @@ class Analyzer:
                 # Level 1 and higher
                 if int(level) > 0:
                     level_changes_made = False
+                    prev_level = str(int(level) - 1)
 
                     log(f"    {score}")
 

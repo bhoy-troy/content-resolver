@@ -161,7 +161,7 @@ def _generate_view_lists(query):
             for list_name, list_content in lists.items():
                 # Generate the arch-specific lists
                 file_name = f"{list_name}--{view_conf_id}--{arch}"
-                _generate_txt_file(sorted(list(list_content)), file_name, query.settings)
+                _generate_txt_file(sorted(list_content), file_name, query.settings)
 
                 # Populate the all-arch lists
                 if list_name not in all_arches_lists:
@@ -171,7 +171,7 @@ def _generate_view_lists(query):
         for list_name, list_content in all_arches_lists.items():
             # Generate the all-arch lists
             file_name = f"{list_name}--{view_conf_id}"
-            _generate_txt_file(sorted(list(list_content)), file_name, query.settings)
+            _generate_txt_file(sorted(list_content), file_name, query.settings)
 
     log("Done!")
     log("")

@@ -1324,7 +1324,7 @@ class ConfigManager:
                     repo_id = view_conf["repository"]
                     if arch in configs["repos"][repo_id]["source"]["architectures"]:
                         actual_arches.add(arch)
-                view_conf["architectures"] = sorted(list(actual_arches))
+                view_conf["architectures"] = sorted(actual_arches)
 
         # Adjust addon view architecture based on its base view architectures
         for view_conf in configs["views"].values():
@@ -1336,7 +1336,7 @@ class ConfigManager:
                     base_view_id = view_conf["base_view_id"]
                     if arch in configs["views"][base_view_id]["architectures"]:
                         actual_arches.add(arch)
-                view_conf["architectures"] = sorted(list(actual_arches))
+                view_conf["architectures"] = sorted(actual_arches)
 
         # FIXME: Check other configs, too!
 
