@@ -3,7 +3,7 @@
 ###############################################################################
 
 
-from functools import lru_cache
+from functools import cache
 
 from content_resolver.utils import pkg_id_to_name
 
@@ -24,7 +24,7 @@ class Query:
             num /= 1024.0
         return f"{num:.1f} T{suffix}"
 
-    @lru_cache(maxsize=None)
+    @cache
     def workloads(self, workload_conf_id, env_conf_id, repo_id, arch, list_all=False, output_change=None):
         # accepts none in any argument, and in those cases, answers for all instances
 
@@ -78,7 +78,7 @@ class Query:
             return False
         return sorted(list(matching_ids))
 
-    @lru_cache(maxsize=None)
+    @cache
     def workloads_id(self, id, list_all=False, output_change=None):
         # Accepts both env and workload ID, and returns workloads that match that
         id_components = id.split(":")
@@ -100,7 +100,7 @@ class Query:
 
         raise ValueError("That seems to be an invalid ID!")
 
-    @lru_cache(maxsize=None)
+    @cache
     def envs(self, env_conf_id, repo_id, arch, list_all=False, output_change=None):
         # accepts none in any argument, and in those cases, answers for all instances
 
@@ -148,7 +148,7 @@ class Query:
             return False
         return sorted(list(matching_ids))
 
-    @lru_cache(maxsize=None)
+    @cache
     def envs_id(self, id, list_all=False, output_change=None):
         # Accepts both env and workload ID, and returns workloads that match that
         id_components = id.split(":")
@@ -170,7 +170,7 @@ class Query:
 
         raise ValueError("That seems to be an invalid ID!")
 
-    @lru_cache(maxsize=None)
+    @cache
     def workload_pkgs(self, workload_conf_id, env_conf_id, repo_id, arch, output_change=None):
         # Warning: mixing repos and arches works, but might cause mess on the output
 
@@ -327,7 +327,7 @@ class Query:
         # And sort them by nevr which is their ID
         return sorted(final_pkg_list, key=lambda k: k["id"])
 
-    @lru_cache(maxsize=None)
+    @cache
     def workload_pkgs_id(self, id, output_change=None):
         # Accepts both env and workload ID, and returns pkgs for workloads that match
         id_components = id.split(":")
@@ -349,7 +349,7 @@ class Query:
 
         raise ValueError("That seems to be an invalid ID!")
 
-    @lru_cache(maxsize=None)
+    @cache
     def env_pkgs(self, env_conf_id, repo_id, arch):
         # Warning: mixing repos and arches works, but might cause mess on the output
 
@@ -417,7 +417,7 @@ class Query:
 
         return final_pkg_list_sorted
 
-    @lru_cache(maxsize=None)
+    @cache
     def env_pkgs_id(self, id):
         # Accepts both env and workload ID, and returns pkgs for envs that match
         id_components = id.split(":")
@@ -439,19 +439,19 @@ class Query:
 
         raise ValueError("That seems to be an invalid ID!")
 
-    @lru_cache(maxsize=None)
+    @cache
     def workload_size(self, workload_conf_id, env_conf_id, repo_id, arch):
         # A total size of a workload (or multiple combined!)
         pkgs = self.workload_pkgs(workload_conf_id, env_conf_id, repo_id, arch)
         return sum(pkg["installsize"] for pkg in pkgs)
 
-    @lru_cache(maxsize=None)
+    @cache
     def env_size(self, env_conf_id, repo_id, arch):
         # A total size of an env (or multiple combined!)
         pkgs = self.env_pkgs(env_conf_id, repo_id, arch)
         return sum(pkg["installsize"] for pkg in pkgs)
 
-    @lru_cache(maxsize=None)
+    @cache
     def workload_size_id(self, id):
         # Accepts both env and workload ID, and returns pkgs for envs that match
         id_components = id.split(":")
@@ -473,7 +473,7 @@ class Query:
 
         raise ValueError("That seems to be an invalid ID!")
 
-    @lru_cache(maxsize=None)
+    @cache
     def env_size_id(self, id):
         # Accepts both env and workload ID, and returns pkgs for envs that match
         id_components = id.split(":")
@@ -512,7 +512,7 @@ class Query:
     def url_slug_id(self, any_id):
         return any_id.replace(":", "--")
 
-    @lru_cache(maxsize=None)
+    @cache
     def workloads_in_view(self, view_conf_id, arch, maintainer=None):
         view_conf = self.configs["views"][view_conf_id]
         repo_id = view_conf["repository"]
@@ -548,7 +548,7 @@ class Query:
 
         return sorted(list(final_workload_ids))
 
-    @lru_cache(maxsize=None)
+    @cache
     def arches_in_view(self, view_conf_id, maintainer=None):
 
         if len(self.configs["views"][view_conf_id]["architectures"]):
@@ -557,7 +557,7 @@ class Query:
 
         return self.settings["allowed_arches"]
 
-    @lru_cache(maxsize=None)
+    @cache
     def pkgs_in_view(self, view_conf_id, arch, output_change=None, maintainer=None):
 
         # Extra fields will be added into each package:
@@ -813,7 +813,7 @@ class Query:
 
         return pkgs
 
-    @lru_cache(maxsize=None)
+    @cache
     def workload_succeeded(self, workload_conf_id, env_conf_id, repo_id, arch):
         workload_ids = self.workloads(workload_conf_id, env_conf_id, repo_id, arch, list_all=True)
 
@@ -823,7 +823,7 @@ class Query:
                 return False
         return True
 
-    @lru_cache(maxsize=None)
+    @cache
     def workload_warnings(self, workload_conf_id, env_conf_id, repo_id, arch):
         workload_ids = self.workloads(workload_conf_id, env_conf_id, repo_id, arch, list_all=True)
 
@@ -833,7 +833,7 @@ class Query:
                 return True
         return False
 
-    @lru_cache(maxsize=None)
+    @cache
     def env_succeeded(self, env_conf_id, repo_id, arch):
         env_ids = self.envs(env_conf_id, repo_id, arch, list_all=True)
 
@@ -843,7 +843,7 @@ class Query:
                 return False
         return True
 
-    @lru_cache(maxsize=None)
+    @cache
     def view_succeeded(self, view_conf_id, arch, maintainer=None):
         workload_ids = self.workloads_in_view(view_conf_id, arch)
 
@@ -992,7 +992,7 @@ class Query:
 
         return unwanted_pkg_names
 
-    @lru_cache(maxsize=None)
+    @cache
     def view_placeholder_srpms(self, view_conf_id, arch):
         if not arch:
             raise ValueError("arch must be specified, can't be None")
@@ -1025,7 +1025,7 @@ class Query:
 
         return placeholder_srpms
 
-    @lru_cache(maxsize=None)
+    @cache
     def view_maintainers(self, view_conf_id, arch):
         workload_ids = self.workloads_in_view(view_conf_id, arch)
 
@@ -1039,7 +1039,7 @@ class Query:
 
         return maintainers
 
-    @lru_cache(maxsize=None)
+    @cache
     def maintainers(self):
 
         maintainers = {}
@@ -1074,10 +1074,10 @@ class Query:
 
         return maintainers
 
-    @lru_cache(maxsize=None)
+    @cache
     def view_pkg_name_details(self, pkg_name, view_conf_id):
         raise NotImplementedError
 
-    @lru_cache(maxsize=None)
+    @cache
     def view_srpm_name_details(self, srpm_name, view_conf_id):
         raise NotImplementedError
