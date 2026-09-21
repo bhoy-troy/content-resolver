@@ -8,6 +8,19 @@ from content_resolver.utils import dump_data, err_log, log
 
 
 def _save_current_historic_data(query):
+    """Snapshot the current week's metrics and append them to the history directory.
+
+    Collects package counts and install sizes for every succeeded workload and
+    environment, package counts per repository/arch, and SRPM counts for each
+    view configuration.  The resulting dict is serialised to a JSON file named
+    ``historic_data-<year>-week_<week>.json`` inside ``<output>/history/``.
+    An existing file for the same week is silently overwritten.
+
+    Args:
+        query: A fully-resolved ``QueryObject`` (or equivalent) whose
+            ``settings``, ``configs``, and ``data`` attributes provide the
+            workload/env/repo/view results to snapshot.
+    """
     # This is the historic data for charts
     # Package lists are above
 
@@ -96,6 +109,22 @@ def _save_current_historic_data(query):
 
 
 def _read_historic_data(query):
+    """Load all previously saved weekly snapshots from the history directory.
+
+    Scans ``<output>/history/`` for files whose names match the pattern
+    ``historic_data-YYYY-week_WW.json``, parses each one, and stores them in a
+    dict keyed by ``"<year>-week_<week>"``.  Files that are malformed or
+    missing the ``date`` field are skipped with a warning.
+
+    Args:
+        query: A query object whose ``settings["output"]`` points to the
+            directory that contains the ``history/`` sub-directory.
+
+    Returns:
+        dict: A mapping of ``"<year>-week_<week>"`` strings to the parsed JSON
+            document for that week.  The dict preserves file-sort order so that
+            Chart.js labels appear in chronological sequence.
+    """
     log("Reading historic data...")
 
     directory = os.path.join(query.settings["output"], "history")
@@ -130,7 +159,33 @@ def _read_historic_data(query):
 
 
 def _generate_chartjs_data(historic_data, query):
+    """Convert historic snapshots into Chart.js JSON files for every report page.
 
+    Iterates over the resolved workloads, environments, repositories, and views
+    and, for each, builds a Chart.js ``data`` object (``labels`` + ``datasets``)
+    that covers every weekly entry in *historic_data*.  Each JSON file is
+    written via ``_generate_json_file`` under a key such as:
+
+    * ``chartjs-data--workload--<workload_id>``
+    * ``chartjs-data--workload-overview--<workload_conf_id>--<repo_id>``
+    * ``chartjs-data--workload-cmp-arches--<wc_id>--<ec_id>--<repo_id>``
+    * ``chartjs-data--workload-cmp-envs--<wc_id>--<repo_id>--<arch>``
+    * ``chartjs-data--env--<env_id>``
+    * ``chartjs-data--env-overview--<env_conf_id>--<repo_id>``
+    * ``chartjs-data--env-cmp-arches--<env_conf_id>--<repo_id>``
+    * ``chartjs-data--view--<view_conf_id>``
+
+    Missing data points for a given week are represented as ``None`` so that
+    Chart.js can render gaps rather than connecting a missing point to its
+    neighbours.  View datasets are accumulated as running totals so that the
+    stacked bar chart shows cumulative heights correctly.
+
+    Args:
+        historic_data (dict): Ordered mapping of ``"<year>-week_<week>"`` keys
+            to weekly snapshot dicts, as returned by ``_read_historic_data``.
+        query: A query object exposing ``data``, ``configs``, ``settings``,
+            and the ``workloads()``/``envs()`` helper methods.
+    """
     # Data for workload pages
     for workload_id in query.workloads(None, None, None, None, list_all=True):
         entry_data = {
@@ -468,6 +523,21 @@ def _generate_chartjs_data(historic_data, query):
 
 
 def generate_historic_data(query):
+    """Orchestrate the full historic-data pipeline for a resolved query.
+
+    This is the public entry point called by the top-level content-resolver
+    script.  It executes the three pipeline steps in order:
+
+    1. ``_save_current_historic_data`` – writes this week's snapshot.
+    2. ``_read_historic_data`` – loads all weekly snapshots (including the one
+       just written) from disk.
+    3. ``_generate_chartjs_data`` – converts the snapshots to Chart.js JSON
+       files consumed by the HTML report templates.
+
+    Args:
+        query: A fully-resolved query object passed through to each pipeline
+            step unchanged.
+    """
     log("")
     log("###############################################################################")
     log("### Historic Data #############################################################")

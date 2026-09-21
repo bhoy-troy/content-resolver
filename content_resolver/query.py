@@ -9,7 +9,27 @@ from content_resolver.utils import pkg_id_to_name
 
 
 class Query:
+    """Provides a high-level, cached read-only interface over resolved package data.
+
+    All query methods accept ``None`` for any filter argument, which is treated as
+    "match all".  Results are memoised with ``@cache`` / ``@lru_cache`` so repeated
+    calls with the same arguments are free after the first invocation.
+
+    Attributes:
+        data: Raw resolved data dict produced by the analyser (workloads, envs, pkgs …).
+        configs: Parsed YAML configuration dicts (workloads, envs, repos, views …).
+        settings: Global settings dict (allowed_arches, etc.).
+        computed_data: Scratch dict reserved for derived/aggregated values.
+    """
+
     def __init__(self, data, configs, settings):
+        """Initialise the Query with resolved data and configuration.
+
+        Args:
+            data: Resolved package data from the analyser.
+            configs: Loaded YAML configuration objects.
+            settings: Global run-time settings (e.g. ``allowed_arches``).
+        """
         self.data = data
         self.configs = configs
         self.settings = settings
@@ -17,6 +37,18 @@ class Query:
         self.computed_data = {}
 
     def size(self, num, suffix="B"):
+        """Convert a byte count to a human-readable string (e.g. ``"1.2 MB"``).
+
+        Note:
+            A standalone version of this helper also lives in ``utils.py``.
+
+        Args:
+            num: Size in bytes.
+            suffix: Unit suffix appended after the SI prefix (default ``"B"``).
+
+        Returns:
+            Formatted string such as ``"3.7 kB"`` or ``"1.2 TB"``.
+        """
         # FIXME: is this method required or used, same function is in utils.
         for unit in ["", "k", "M", "G"]:
             if abs(num) < 1024.0:
@@ -26,8 +58,29 @@ class Query:
 
     @cache
     def workloads(self, workload_conf_id, env_conf_id, repo_id, arch, list_all=False, output_change=None):
-        # accepts none in any argument, and in those cases, answers for all instances
+        """Check whether matching workloads exist, or return a list of their IDs/components.
 
+        Accepts ``None`` for any filter argument to match all values of that dimension.
+        When ``list_all=False`` (the default) the method short-circuits and returns
+        ``True`` / ``False`` as soon as a match is found or exhausted.
+
+        Args:
+            workload_conf_id: Workload configuration ID to filter by, or ``None`` for all.
+            env_conf_id: Environment configuration ID to filter by, or ``None`` for all.
+            repo_id: Repository ID to filter by, or ``None`` for all.
+            arch: Architecture to filter by, or ``None`` for all allowed arches.
+            list_all: When ``True`` collect and return all matching IDs instead of a bool.
+            output_change: If set, return a sorted list of a single ID component instead of
+                full workload IDs.  Must be one of ``"workload_conf_ids"``,
+                ``"env_conf_ids"``, ``"repo_ids"``, or ``"arches"``.
+
+        Returns:
+            ``True`` / ``False`` when ``list_all=False``, or a sorted list of ID strings /
+            component strings when ``list_all=True`` or ``output_change`` is set.
+
+        Raises:
+            ValueError: If ``output_change`` is not a recognised component name.
+        """
         # It can output just one part of the id.
         # That's useful to, for example, list all arches associated with a workload_conf_id
         if output_change:
@@ -80,7 +133,23 @@ class Query:
 
     @cache
     def workloads_id(self, id, list_all=False, output_change=None):
-        # Accepts both env and workload ID, and returns workloads that match that
+        """Look up workloads using a pre-formed env or workload ID string.
+
+        A convenience wrapper around :meth:`workloads` that accepts either a
+        3-component env ID (``"env_conf_id:repo_id:arch"``) or a 4-component
+        workload ID (``"workload_conf_id:env_conf_id:repo_id:arch"``).
+
+        Args:
+            id: Colon-separated env or workload ID string.
+            list_all: Forwarded to :meth:`workloads`.
+            output_change: Forwarded to :meth:`workloads`.
+
+        Returns:
+            Same as :meth:`workloads`.
+
+        Raises:
+            ValueError: If ``id`` does not have 3 or 4 components.
+        """
         id_components = id.split(":")
 
         # It's an env!
@@ -102,8 +171,26 @@ class Query:
 
     @cache
     def envs(self, env_conf_id, repo_id, arch, list_all=False, output_change=None):
-        # accepts none in any argument, and in those cases, answers for all instances
+        """Check whether matching environments exist, or return a list of their IDs/components.
 
+        Mirrors the behaviour of :meth:`workloads` for the environment dimension.
+        Accepts ``None`` for any filter argument to match all values.
+
+        Args:
+            env_conf_id: Environment configuration ID to filter by, or ``None`` for all.
+            repo_id: Repository ID to filter by, or ``None`` for all.
+            arch: Architecture to filter by, or ``None`` for all allowed arches.
+            list_all: When ``True`` collect and return all matching IDs instead of a bool.
+            output_change: If set, return a sorted list of a single ID component.
+                Must be one of ``"env_conf_ids"``, ``"repo_ids"``, or ``"arches"``.
+
+        Returns:
+            ``True`` / ``False`` when ``list_all=False``, or a sorted list of strings
+            when ``list_all=True`` or ``output_change`` is set.
+
+        Raises:
+            ValueError: If ``output_change`` is not a recognised component name.
+        """
         # It can output just one part of the id.
         # That's useful to, for example, list all arches associated with a workload_conf_id
         if output_change:
@@ -150,7 +237,23 @@ class Query:
 
     @cache
     def envs_id(self, id, list_all=False, output_change=None):
-        # Accepts both env and workload ID, and returns workloads that match that
+        """Look up environments using a pre-formed env or workload ID string.
+
+        A convenience wrapper around :meth:`envs` that parses a colon-separated
+        3-component env ID or 4-component workload ID and extracts the env-relevant
+        components before delegating.
+
+        Args:
+            id: Colon-separated env or workload ID string.
+            list_all: Forwarded to :meth:`envs`.
+            output_change: Forwarded to :meth:`envs`.
+
+        Returns:
+            Same as :meth:`envs`.
+
+        Raises:
+            ValueError: If ``id`` does not have 3 or 4 components.
+        """
         id_components = id.split(":")
 
         # It's an env!
@@ -172,19 +275,39 @@ class Query:
 
     @cache
     def workload_pkgs(self, workload_conf_id, env_conf_id, repo_id, arch, output_change=None):
-        # Warning: mixing repos and arches works, but might cause mess on the output
+        """Return packages belonging to the matching workloads.
 
-        # Default output is just a flat list. Extra fields will be added into each package:
-        # q_in          - set of workload_ids including this pkg
-        # q_required_in - set of workload_ids where this pkg is required (top-level)
-        # q_env_in      - set of workload_ids where this pkg is in env
-        # q_arch        - architecture
+        By default returns a flat, sorted list of package dicts (one entry per
+        ``repo_id × arch × pkg_id`` combination).  Each dict contains the standard
+        RPM fields plus the following extra keys populated from workload membership:
 
-        # Other outputs:
-        #   - "ids"         — a list ids
-        #   - "binary_names"  — a list of RPM names
-        #   - "source_nvr"  — a list of SRPM NVRs
-        #   - "source_names"  — a list of SRPM names
+        - ``q_in``          — ``set`` of workload IDs that include this package.
+        - ``q_required_in`` — ``set`` of workload IDs where this package is explicitly
+          required (top-level, listed in the workload config or arch-specific packages).
+        - ``q_env_in``      — ``set`` of workload IDs where this package comes from
+          the environment (not directly from the workload).
+        - ``q_arch``        — Architecture string for the resolved package.
+
+        Warning:
+            Mixing multiple repos or arches (by passing ``None``) works but can
+            produce confusing output when packages from different repos overlap.
+
+        Args:
+            workload_conf_id: Workload configuration ID filter, or ``None`` for all.
+            env_conf_id: Environment configuration ID filter, or ``None`` for all.
+            repo_id: Repository ID filter, or ``None`` for all.
+            arch: Architecture filter, or ``None`` for all allowed arches.
+            output_change: If set, return a sorted list of a specific field instead of
+                full package dicts.  Must be one of ``"ids"``, ``"binary_names"``,
+                ``"source_nvr"``, or ``"source_names"``.
+
+        Returns:
+            A sorted list of package dicts, or a sorted list of strings when
+            ``output_change`` is specified.
+
+        Raises:
+            ValueError: If ``output_change`` is not a recognised value.
+        """
         if output_change:
             list_all = True
             if output_change not in ["ids", "binary_names", "source_nvr", "source_names"]:
@@ -329,7 +452,20 @@ class Query:
 
     @cache
     def workload_pkgs_id(self, id, output_change=None):
-        # Accepts both env and workload ID, and returns pkgs for workloads that match
+        """Return workload packages using a pre-formed env or workload ID string.
+
+        Parses ``id`` and delegates to :meth:`workload_pkgs`.
+
+        Args:
+            id: Colon-separated 3-component env ID or 4-component workload ID.
+            output_change: Forwarded to :meth:`workload_pkgs`.
+
+        Returns:
+            Same as :meth:`workload_pkgs`.
+
+        Raises:
+            ValueError: If ``id`` does not have 3 or 4 components.
+        """
         id_components = id.split(":")
 
         # It's an env!
@@ -351,13 +487,28 @@ class Query:
 
     @cache
     def env_pkgs(self, env_conf_id, repo_id, arch):
-        # Warning: mixing repos and arches works, but might cause mess on the output
+        """Return packages belonging to the matching environments.
 
-        # Output is just a flat list. Extra fields will be added into each package:
-        # q_in          - set of env_ids including this pkg
-        # q_required_in - set of env_ids where this pkg is required (top-level)
-        # q_arch        - architecture
+        Returns a flat, sorted list of package dicts.  Each dict contains the
+        standard RPM fields plus:
 
+        - ``q_in``          — ``set`` of env IDs that include this package.
+        - ``q_required_in`` — ``set`` of env IDs where this package is explicitly
+          required (listed in the env config or its arch-specific packages).
+        - ``q_arch``        — Architecture string for the resolved package.
+
+        Warning:
+            Mixing multiple repos or arches (by passing ``None``) works but can
+            produce confusing output when packages from different repos overlap.
+
+        Args:
+            env_conf_id: Environment configuration ID filter, or ``None`` for all.
+            repo_id: Repository ID filter, or ``None`` for all.
+            arch: Architecture filter, or ``None`` for all allowed arches.
+
+        Returns:
+            A sorted list of package dicts, keyed by package NEVRA.
+        """
         # Step 1: get all the matching envs!
         env_ids = self.envs(env_conf_id, repo_id, arch, list_all=True)
 
@@ -419,7 +570,20 @@ class Query:
 
     @cache
     def env_pkgs_id(self, id):
-        # Accepts both env and workload ID, and returns pkgs for envs that match
+        """Return environment packages using a pre-formed env or workload ID string.
+
+        Parses ``id`` and delegates to :meth:`env_pkgs`.
+
+        Args:
+            id: Colon-separated 3-component env ID or 4-component workload ID.
+                When a workload ID is given only the env components are used.
+
+        Returns:
+            Same as :meth:`env_pkgs`.
+
+        Raises:
+            ValueError: If ``id`` does not have 3 or 4 components.
+        """
         id_components = id.split(":")
 
         # It's an env!
@@ -441,19 +605,51 @@ class Query:
 
     @cache
     def workload_size(self, workload_conf_id, env_conf_id, repo_id, arch):
-        # A total size of a workload (or multiple combined!)
+        """Return the total installed size of all packages in the matching workloads.
+
+        Sums the ``installsize`` field across every package returned by
+        :meth:`workload_pkgs` for the same filter arguments.
+
+        Args:
+            workload_conf_id: Workload configuration ID filter, or ``None`` for all.
+            env_conf_id: Environment configuration ID filter, or ``None`` for all.
+            repo_id: Repository ID filter, or ``None`` for all.
+            arch: Architecture filter, or ``None`` for all allowed arches.
+
+        Returns:
+            Total installed size in bytes (``int``).
+        """
         pkgs = self.workload_pkgs(workload_conf_id, env_conf_id, repo_id, arch)
         return sum(pkg["installsize"] for pkg in pkgs)
 
     @cache
     def env_size(self, env_conf_id, repo_id, arch):
-        # A total size of an env (or multiple combined!)
+        """Return the total installed size of all packages in the matching environments.
+
+        Args:
+            env_conf_id: Environment configuration ID filter, or ``None`` for all.
+            repo_id: Repository ID filter, or ``None`` for all.
+            arch: Architecture filter, or ``None`` for all allowed arches.
+
+        Returns:
+            Total installed size in bytes (``int``).
+        """
         pkgs = self.env_pkgs(env_conf_id, repo_id, arch)
         return sum(pkg["installsize"] for pkg in pkgs)
 
     @cache
     def workload_size_id(self, id):
-        # Accepts both env and workload ID, and returns pkgs for envs that match
+        """Return the total workload size using a pre-formed env or workload ID string.
+
+        Args:
+            id: Colon-separated 3-component env ID or 4-component workload ID.
+
+        Returns:
+            Total installed size in bytes (``int``).
+
+        Raises:
+            ValueError: If ``id`` does not have 3 or 4 components.
+        """
         id_components = id.split(":")
 
         # It's an env!
@@ -475,7 +671,17 @@ class Query:
 
     @cache
     def env_size_id(self, id):
-        # Accepts both env and workload ID, and returns pkgs for envs that match
+        """Return the total environment size using a pre-formed env or workload ID string.
+
+        Args:
+            id: Colon-separated 3-component env ID or 4-component workload ID.
+
+        Returns:
+            Total installed size in bytes (``int``).
+
+        Raises:
+            ValueError: If ``id`` does not have 3 or 4 components.
+        """
         id_components = id.split(":")
 
         # It's an env!
@@ -495,25 +701,93 @@ class Query:
 
         raise ValueError("That seems to be an invalid ID!")
 
-    # TODO: these function have similar output,  create a re-usable helper function
+    # TODO: these functions have similar output — create a re-usable helper function
 
     def workload_url_slug(self, workload_conf_id, env_conf_id, repo_id, arch):
+        """Return a URL-safe slug for a workload, using ``--`` as the separator.
+
+        Args:
+            workload_conf_id: Workload configuration ID.
+            env_conf_id: Environment configuration ID.
+            repo_id: Repository ID.
+            arch: Architecture string.
+
+        Returns:
+            Slug string e.g. ``"my-workload--my-env--fedora-eln--x86_64"``.
+        """
         return f"{workload_conf_id}--{env_conf_id}--{repo_id}--{arch}"
 
     def env_url_slug(self, env_conf_id, repo_id, arch):
+        """Return a URL-safe slug for an environment, using ``--`` as the separator.
+
+        Args:
+            env_conf_id: Environment configuration ID.
+            repo_id: Repository ID.
+            arch: Architecture string.
+
+        Returns:
+            Slug string e.g. ``"my-env--fedora-eln--x86_64"``.
+        """
         return f"{env_conf_id}--{repo_id}--{arch}"
 
     def workload_id_string(self, workload_conf_id, env_conf_id, repo_id, arch):
+        """Return the canonical colon-separated ID string for a workload.
+
+        Args:
+            workload_conf_id: Workload configuration ID.
+            env_conf_id: Environment configuration ID.
+            repo_id: Repository ID.
+            arch: Architecture string.
+
+        Returns:
+            ID string e.g. ``"my-workload:my-env:fedora-eln:x86_64"``.
+        """
         return f"{workload_conf_id}:{env_conf_id}:{repo_id}:{arch}"
 
     def env_id_string(self, env_conf_id, repo_id, arch):
+        """Return the canonical colon-separated ID string for an environment.
+
+        Args:
+            env_conf_id: Environment configuration ID.
+            repo_id: Repository ID.
+            arch: Architecture string.
+
+        Returns:
+            ID string e.g. ``"my-env:fedora-eln:x86_64"``.
+        """
         return f"{env_conf_id}:{repo_id}:{arch}"
 
     def url_slug_id(self, any_id):
+        """Convert any colon-separated ID string to its URL-safe ``--`` slug form.
+
+        Args:
+            any_id: An env or workload ID string using ``:`` as the separator.
+
+        Returns:
+            The same string with every ``:`` replaced by ``--``.
+        """
         return any_id.replace(":", "--")
 
     @cache
     def workloads_in_view(self, view_conf_id, arch, maintainer=None):
+        """Return a sorted list of workload IDs that belong to a view.
+
+        Filters workloads by the view's associated repository and labels, then
+        optionally narrows further by maintainer.
+
+        Args:
+            view_conf_id: View configuration ID.
+            arch: Architecture to filter by.  Must be a valid allowed arch or
+                one that the view explicitly declares; ``None`` is not accepted.
+            maintainer: If provided, only workloads owned by this maintainer are
+                included.
+
+        Returns:
+            Sorted list of workload ID strings.
+
+        Raises:
+            ValueError: If ``arch`` is not in the global allowed arches list.
+        """
         view_conf = self.configs["views"][view_conf_id]
         repo_id = view_conf["repository"]
         labels = view_conf["labels"]
@@ -550,7 +824,19 @@ class Query:
 
     @cache
     def arches_in_view(self, view_conf_id, maintainer=None):
+        """Return the list of architectures active for a view.
 
+        If the view configuration declares an explicit ``architectures`` list,
+        that list is returned.  Otherwise the global ``allowed_arches`` setting
+        is used.
+
+        Args:
+            view_conf_id: View configuration ID.
+            maintainer: Currently unused; reserved for future filtering.
+
+        Returns:
+            Sorted list of architecture strings.
+        """
         if len(self.configs["views"][view_conf_id]["architectures"]):
             arches = self.configs["views"][view_conf_id]["architectures"]
             return sorted(arches)
@@ -559,20 +845,37 @@ class Query:
 
     @cache
     def pkgs_in_view(self, view_conf_id, arch, output_change=None, maintainer=None):
+        """Return all packages visible in a view for a given architecture.
 
-        # Extra fields will be added into each package:
-        # q_in          - set of workload_ids including this pkg
-        # q_required_in - set of workload_ids where this pkg is required (top-level)
-        # q_env_in      - set of workload_ids where this pkg is in env
-        # q_dep_in      - set of workload_ids where this pkg is a dependency (that means not required)
-        # q_maintainers - set of workload maintainers
+        Aggregates packages from every workload that belongs to the view.  For
+        addon views, packages already present in the base view are removed.
+        Each package dict includes the standard RPM fields plus:
 
-        # Other outputs:
-        #   - "ids"         — a list of ids (NEVRA)
-        #   - "nevrs"         — a list of NEVR
-        #   - "binary_names"  — a list of RPM names
-        #   - "source_nvr"  — a list of SRPM NVRs
-        #   - "source_names"  — a list of SRPM names
+        - ``q_in``          — ``set`` of workload IDs that include this package.
+        - ``q_required_in`` — ``set`` of workload IDs where the package is explicitly
+          required (listed in the workload config or its arch-specific packages).
+        - ``q_dep_in``      — ``set`` of workload IDs where the package is an indirect
+          dependency (pulled in transitively, not listed explicitly).
+        - ``q_env_in``      — ``set`` of workload IDs where the package originates from
+          the environment.
+        - ``q_maintainers`` — ``set`` of maintainer handles associated with this package.
+
+        Args:
+            view_conf_id: View configuration ID.
+            arch: Architecture to resolve packages for.
+            output_change: If set, return a sorted list of a specific field instead of
+                full package dicts.  Must be one of ``"ids"``, ``"nevrs"``,
+                ``"binary_names"``, ``"source_nvr"``, or ``"source_names"``.
+            maintainer: If provided, only packages owned by this maintainer are returned.
+                The ``q_*`` fields still reflect the full view context.
+
+        Returns:
+            A sorted list of package dicts, or a sorted list of strings when
+            ``output_change`` is specified.
+
+        Raises:
+            ValueError: If ``output_change`` is not a recognised value.
+        """
         if output_change:
             list_all = True
             if output_change not in ["ids", "nevrs", "binary_names", "source_nvr", "source_names"]:
@@ -742,8 +1045,28 @@ class Query:
 
     @cache
     def view_buildroot_pkgs(self, view_conf_id, arch, output_change=None, maintainer=None):
-        # Other outputs:
-        #   - "source_names"  — a list of SRPM names
+        """Return the buildroot packages required to build sources in a view.
+
+        Combines the base buildroot (packages always present in the build root) with
+        per-SRPM build requirements declared in the buildroot configuration.  Where
+        available, SRPM names resolved from ``buildroot_pkg_relations`` are attached.
+
+        Args:
+            view_conf_id: View configuration ID.
+            arch: Architecture for which buildroot data is required.
+            output_change: If set to ``"source_names"``, return a sorted list of
+                unique SRPM names instead of the full package dict.
+            maintainer: Currently unused; reserved for future filtering.
+
+        Returns:
+            A dict of ``{pkg_name: {required_by, base_buildroot, srpm_name}}``
+            by default, or a sorted list of SRPM name strings when
+            ``output_change="source_names"``.  Returns an empty dict / list if no
+            buildroot configuration is found for the view.
+
+        Raises:
+            ValueError: If ``output_change`` is not ``"source_names"``.
+        """
         if output_change:
             if output_change not in ["source_names"]:
                 raise ValueError('output_change must be one of: "source_names"')
@@ -815,6 +1138,18 @@ class Query:
 
     @cache
     def workload_succeeded(self, workload_conf_id, env_conf_id, repo_id, arch):
+        """Return ``True`` if all matching workloads resolved successfully.
+
+        Args:
+            workload_conf_id: Workload configuration ID filter, or ``None`` for all.
+            env_conf_id: Environment configuration ID filter, or ``None`` for all.
+            repo_id: Repository ID filter, or ``None`` for all.
+            arch: Architecture filter, or ``None`` for all allowed arches.
+
+        Returns:
+            ``True`` if every matching workload has ``succeeded=True``, otherwise
+            ``False``.
+        """
         workload_ids = self.workloads(workload_conf_id, env_conf_id, repo_id, arch, list_all=True)
 
         for workload_id in workload_ids:
@@ -825,6 +1160,18 @@ class Query:
 
     @cache
     def workload_warnings(self, workload_conf_id, env_conf_id, repo_id, arch):
+        """Return ``True`` if any matching workload has a warning message.
+
+        Args:
+            workload_conf_id: Workload configuration ID filter, or ``None`` for all.
+            env_conf_id: Environment configuration ID filter, or ``None`` for all.
+            repo_id: Repository ID filter, or ``None`` for all.
+            arch: Architecture filter, or ``None`` for all allowed arches.
+
+        Returns:
+            ``True`` as soon as a workload with a non-empty warning message is
+            found, ``False`` if none have warnings.
+        """
         workload_ids = self.workloads(workload_conf_id, env_conf_id, repo_id, arch, list_all=True)
 
         for workload_id in workload_ids:
@@ -835,6 +1182,17 @@ class Query:
 
     @cache
     def env_succeeded(self, env_conf_id, repo_id, arch):
+        """Return ``True`` if all matching environments resolved successfully.
+
+        Args:
+            env_conf_id: Environment configuration ID filter, or ``None`` for all.
+            repo_id: Repository ID filter, or ``None`` for all.
+            arch: Architecture filter, or ``None`` for all allowed arches.
+
+        Returns:
+            ``True`` if every matching environment has ``succeeded=True``, otherwise
+            ``False``.
+        """
         env_ids = self.envs(env_conf_id, repo_id, arch, list_all=True)
 
         for env_id in env_ids:
@@ -845,6 +1203,18 @@ class Query:
 
     @cache
     def view_succeeded(self, view_conf_id, arch, maintainer=None):
+        """Return ``True`` if all workloads in a view resolved successfully.
+
+        Args:
+            view_conf_id: View configuration ID.
+            arch: Architecture to check.
+            maintainer: If provided, only workloads owned by this maintainer are
+                considered.
+
+        Returns:
+            ``True`` if every relevant workload has ``succeeded=True``, otherwise
+            ``False``.
+        """
         workload_ids = self.workloads_in_view(view_conf_id, arch)
 
         for workload_id in workload_ids:
@@ -862,6 +1232,17 @@ class Query:
         return True
 
     def _srpm_name_to_rpm_names(self, srpm_name, repo_id):
+        """Return the set of binary RPM names produced by a given SRPM in a repo.
+
+        Searches across all architectures in the repository.
+
+        Args:
+            srpm_name: The ``source_name`` (SRPM base name) to look up.
+            repo_id: Repository ID to search within.
+
+        Returns:
+            A ``set`` of binary package name strings.
+        """
         all_pkgs_by_arch = self.data["pkgs"][repo_id]
 
         return {
@@ -873,10 +1254,41 @@ class Query:
 
     @cache
     def view_unwanted_pkgs(self, view_conf_id, arch, output_change=None, maintainer=None):
+        """Return packages that are unwanted in a view.
 
-        # Other outputs:
-        #   - "unwanted_proposals"  — a list of SRPM names
-        #   - "unwanted_confirmed"  — a list of SRPM names
+        Combines two sources of unwanted packages:
+
+        1. **Confirmed** (``unwanted_confirmed``) — packages listed directly in the
+           view configuration's ``unwanted_packages``, ``unwanted_arch_packages``, and
+           ``unwanted_source_packages`` fields.
+        2. **Proposed** (``unwanted_proposals``) — packages referenced from separate
+           unwanted-list configuration objects whose labels intersect with the view's
+           labels.
+
+        Each entry in the returned dict has the shape::
+
+            {
+                "name": str,
+                "unwanted_in_view": bool,   # True if confirmed at view level
+                "unwanted_list_ids": list,  # IDs of proposal lists that include it
+            }
+
+        Args:
+            view_conf_id: View configuration ID.
+            arch: Architecture to filter arch-specific unwanted packages, or
+                ``None`` to include all architectures.
+            output_change: If set, restrict which category of unwanted packages is
+                included.  Must be one of ``"unwanted_proposals"`` or
+                ``"unwanted_confirmed"``.  When ``None`` both categories are included.
+            maintainer: If provided, only unwanted lists owned by this maintainer
+                are considered for proposals.
+
+        Returns:
+            A dict of ``{pkg_name: pkg_dict}`` containing all unwanted packages.
+
+        Raises:
+            ValueError: If ``output_change`` is not a recognised value.
+        """
         output_lists = ["unwanted_proposals", "unwanted_confirmed"]
         if output_change:
             if output_change not in output_lists:
@@ -994,6 +1406,24 @@ class Query:
 
     @cache
     def view_placeholder_srpms(self, view_conf_id, arch):
+        """Return placeholder SRPM entries declared across workloads in a view.
+
+        Placeholder SRPMs represent sources that are expected to be built but do
+        not yet exist in the repository.  Each entry aggregates the build
+        requirements from all workloads that declare the same placeholder.
+
+        Args:
+            view_conf_id: View configuration ID.
+            arch: Architecture to resolve against.  Must be specified (not ``None``).
+
+        Returns:
+            A dict of ``{srpm_name: {"build_requires": set}}`` where
+            ``build_requires`` is the union of build requirements across all
+            workloads that declare the placeholder.
+
+        Raises:
+            ValueError: If ``arch`` is ``None``.
+        """
         if not arch:
             raise ValueError("arch must be specified, can't be None")
 
@@ -1027,6 +1457,15 @@ class Query:
 
     @cache
     def view_maintainers(self, view_conf_id, arch):
+        """Return the set of maintainer handles for all workloads in a view.
+
+        Args:
+            view_conf_id: View configuration ID.
+            arch: Architecture to resolve workloads for.
+
+        Returns:
+            A ``set`` of maintainer strings (e.g. FAS usernames).
+        """
         workload_ids = self.workloads_in_view(view_conf_id, arch)
 
         maintainers = set()
@@ -1041,7 +1480,18 @@ class Query:
 
     @cache
     def maintainers(self):
+        """Return a summary dict of all maintainers across workloads and environments.
 
+        Each maintainer entry has the shape::
+
+            {
+                "name": str,
+                "all_succeeded": bool,  # False if any workload/env they own failed
+            }
+
+        Returns:
+            A dict of ``{maintainer_name: maintainer_dict}``.
+        """
         maintainers = {}
 
         for workload_id in self.workloads(None, None, None, None, list_all=True):
@@ -1076,8 +1526,32 @@ class Query:
 
     @cache
     def view_pkg_name_details(self, pkg_name, view_conf_id):
+        """Return detailed information about a binary package across all arches in a view.
+
+        Note:
+            Not yet implemented.
+
+        Args:
+            pkg_name: Binary RPM name to look up.
+            view_conf_id: View configuration ID.
+
+        Raises:
+            NotImplementedError: Always, until this method is implemented.
+        """
         raise NotImplementedError
 
     @cache
     def view_srpm_name_details(self, srpm_name, view_conf_id):
+        """Return detailed information about a source package across all arches in a view.
+
+        Note:
+            Not yet implemented.
+
+        Args:
+            srpm_name: Source RPM (SRPM) base name to look up.
+            view_conf_id: View configuration ID.
+
+        Raises:
+            NotImplementedError: Always, until this method is implemented.
+        """
         raise NotImplementedError

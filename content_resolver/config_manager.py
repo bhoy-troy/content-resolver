@@ -8,13 +8,44 @@ from content_resolver.utils import err_log, log
 
 
 class ConfigManager:
+    """Manages loading and validation of Content Resolver configuration files.
+
+    This class handles all YAML and JSON configuration files found in the
+    configured directory and exposes a unified ``get_configs()`` method that
+    returns a fully-validated, cross-referenced configuration dictionary.
+
+    Attributes:
+        settings (dict): Runtime settings dictionary containing CLI arguments,
+            allowed architectures, cache paths, and other global parameters.
+    """
+
     def __init__(self, config_file=None):
+        """Initialises the ConfigManager.
+
+        Args:
+            config_file (dict, optional): A pre-built settings dictionary.  When
+                provided, it is used directly and CLI argument parsing is skipped.
+                Defaults to ``None``, in which case settings are loaded from the
+                command line via :meth:`load_settings`.
+        """
         if config_file is not None:
             self.settings = config_file
         else:
             self.settings = self.load_settings()
 
     def load_settings(self):
+        """Parse CLI arguments and build the runtime settings dictionary.
+
+        Defines and parses all supported command-line arguments (configs directory,
+        output directory, cache flags, buildroot mode, DNF cache override,
+        parallelism, and label filtering), then augments the result with a set of
+        hard-coded runtime constants (allowed architectures, subprocess limits,
+        known problematic packages, etc.).
+
+        Returns:
+            dict: A settings dictionary containing all parsed CLI values and
+                runtime constants required by the rest of the application.
+        """
         settings = {}
 
         parser = argparse.ArgumentParser()
@@ -86,9 +117,37 @@ class ConfigManager:
     # - view          views         view_id
 
     def _load_config_repo(self, document_id, document):
+        """Load a v1 repository configuration document (unsupported).
+
+        Args:
+            document_id (str): The YAML file stem used as the repository ID.
+            document (dict): The parsed YAML document.
+
+        Raises:
+            NotImplementedError: Always, because repository v1 is no longer
+                supported and callers must migrate to v2.
+        """
         raise NotImplementedError("Repo v1 is not supported. Please migrate to repo v2.")
 
     def _load_config_repo_v2(self, document_id, document, settings):
+        """Parse a v2 repository configuration document into an internal dict.
+
+        Validates all mandatory fields (name, description, maintainer, source
+        releasever, architectures, and at least one repo with a baseurl) and
+        populates optional fields (composeinfo, base_buildroot_override).
+
+        Args:
+            document_id (str): The YAML file stem used as the repository ID.
+            document (dict): The parsed YAML document.
+            settings (dict): Runtime settings, used to validate architecture names.
+
+        Returns:
+            dict: A normalised repository configuration dictionary.
+
+        Raises:
+            ConfigError: If any mandatory field is missing or invalid, or if a
+                repo entry is missing its ``baseurl``.
+        """
         config = {
             "id": document_id,
         }
@@ -165,6 +224,23 @@ class ConfigManager:
         return config
 
     def _load_config_env(self, document_id, document, settings):
+        """Parse an environment configuration document into an internal dict.
+
+        Validates mandatory fields (name, description, maintainer, repositories,
+        packages, labels) and populates optional fields (arch_packages, options,
+        groups).
+
+        Args:
+            document_id (str): The YAML file stem used as the environment ID.
+            document (dict): The parsed YAML document.
+            settings (dict): Runtime settings, used to validate architecture names.
+
+        Returns:
+            dict: A normalised environment configuration dictionary.
+
+        Raises:
+            ConfigError: If any mandatory field is missing or invalid.
+        """
         config = {
             "id": document_id,
         }
@@ -241,6 +317,26 @@ class ConfigManager:
         return config
 
     def _load_config_workload(self, document_id, document, settings):
+        """Parse a workload configuration document into an internal dict.
+
+        Validates that the document contains a ``data`` section with only known
+        keys, then processes mandatory fields (name, description, maintainer,
+        labels) and optional fields (packages, arch_packages, options, groups,
+        package_placeholders).
+
+        Args:
+            document_id (str): The YAML file stem used as the workload ID.
+            document (dict): The parsed YAML document.
+            settings (dict): Runtime settings, used to validate architecture names.
+
+        Returns:
+            dict: A normalised workload configuration dictionary, including
+                resolved ``package_placeholders`` with per-arch limits.
+
+        Raises:
+            ConfigError: If the ``data`` section is missing, contains unknown
+                keys, or if mandatory fields are absent.
+        """
         config = {
             "id": document_id,
         }
@@ -395,6 +491,23 @@ class ConfigManager:
         return config
 
     def _load_config_label(self, document_id, document, settings):
+        """Parse a label configuration document into an internal dict.
+
+        Labels act as connectors: workloads, environments, and views sharing the
+        same label are grouped together during analysis.
+
+        Args:
+            document_id (str): The YAML file stem used as the label ID.
+            document (dict): The parsed YAML document.
+            settings (dict): Runtime settings (currently unused for labels).
+
+        Returns:
+            dict: A normalised label configuration dictionary with ``id``,
+                ``name``, ``description``, and ``maintainer`` keys.
+
+        Raises:
+            ConfigError: If any mandatory field is missing or invalid.
+        """
         config = {}
         config["id"] = document_id
 
@@ -422,6 +535,25 @@ class ConfigManager:
         return config
 
     def _load_config_compose_view(self, document_id, document, settings):
+        """Parse a compose-view configuration document into an internal dict.
+
+        A compose view ties together a repository with a set of labels and
+        specifies optional architectural restrictions, buildroot strategy, and
+        lists of unwanted packages/SRPMs.
+
+        Args:
+            document_id (str): The YAML file stem used as the view ID.
+            document (dict): The parsed YAML document.
+            settings (dict): Runtime settings, used to supply the default
+                allowed architectures when none are explicitly listed.
+
+        Returns:
+            dict: A normalised compose-view configuration dictionary of
+                ``type`` ``"compose"``.
+
+        Raises:
+            ConfigError: If any mandatory field is missing or invalid.
+        """
         config = {
             "id": document_id,
             "type": "compose",
@@ -498,6 +630,25 @@ class ConfigManager:
         return config
 
     def _load_config_addon_view(self, document_id, document, settings):
+        """Parse an addon-view configuration document into an internal dict.
+
+        An addon view extends an existing compose view (its ``base_view_id``)
+        with additional packages from a secondary repository, and optionally
+        declares unwanted packages or SRPMs.
+
+        Args:
+            document_id (str): The YAML file stem used as the view ID.
+            document (dict): The parsed YAML document.
+            settings (dict): Runtime settings, used to validate architecture names.
+
+        Returns:
+            dict: A normalised addon-view configuration dictionary of
+                ``type`` ``"addon"``.
+
+        Raises:
+            ConfigError: If any mandatory field (name, description, maintainer,
+                labels, base_view_id, repository) is missing or invalid.
+        """
         config = {
             "id": document_id,
             "type": "addon",
@@ -562,6 +713,27 @@ class ConfigManager:
         return config
 
     def _load_config_unwanted(self, document_id, document, settings):
+        """Parse an unwanted-packages configuration document into an internal dict.
+
+        Unwanted configs list RPM binary packages and/or SRPM source packages that
+        should be flagged during analysis, either globally or for specific
+        architectures.  Only known keys are accepted in the ``data`` section.
+
+        Args:
+            document_id (str): The YAML file stem used as the unwanted-list ID.
+            document (dict): The parsed YAML document.
+            settings (dict): Runtime settings, used to validate architecture names.
+
+        Returns:
+            dict: A normalised unwanted-packages configuration dictionary with
+                ``unwanted_packages``, ``unwanted_arch_packages``,
+                ``unwanted_source_packages``, and
+                ``unwanted_arch_source_packages`` keys.
+
+        Raises:
+            ConfigError: If the ``data`` section is missing, contains unknown
+                keys, or if any mandatory field is absent.
+        """
         config = {
             "id": document_id,
         }
@@ -648,6 +820,26 @@ class ConfigManager:
         return config
 
     def _load_config_buildroot(self, document_id, document, settings):
+        """Parse a buildroot configuration document into an internal dict.
+
+        Buildroot configs associate a set of base buildroot packages and per-SRPM
+        build requirements with a specific view, providing the data needed to
+        analyse package build dependencies.
+
+        Args:
+            document_id (str): The YAML file stem used as the buildroot config ID.
+            document (dict): The parsed YAML document.
+            settings (dict): Runtime settings, used to validate architecture names.
+
+        Returns:
+            dict: A normalised buildroot configuration dictionary containing
+                ``maintainer``, ``view_id``, ``base_buildroot`` (per-arch package
+                lists), and ``source_packages`` (per-arch SRPM-to-requires maps).
+
+        Raises:
+            ConfigError: If mandatory fields (``maintainer`` or ``view_id``) are
+                missing or invalid.
+        """
         config = {
             "id": document_id,
         }
@@ -710,6 +902,25 @@ class ConfigManager:
         return config
 
     def _load_json_data_buildroot_pkg_relations(self, document_id, document, settings):
+        """Parse a JSON buildroot binary-relations data file into an internal dict.
+
+        Reads pre-computed binary package relations (produced externally) and
+        stores them keyed by document ID for later use during buildroot analysis.
+
+        Args:
+            document_id (str): The JSON file stem used as the relations record ID.
+            document (dict): The parsed JSON document, expected to contain a
+                ``data`` section with ``view_id``, ``arch``, and ``pkgs`` keys.
+            settings (dict): Runtime settings, used to validate the ``arch`` value.
+
+        Returns:
+            dict: A normalised buildroot-package-relations dictionary with
+                ``id``, ``view_id``, ``arch``, and ``pkg_relations`` keys.
+
+        Raises:
+            ConfigError: If the architecture is unsupported or if any mandatory
+                field is missing.
+        """
         config = {
             "id": document_id,
         }
@@ -832,6 +1043,33 @@ class ConfigManager:
         return configs
 
     def get_configs(self):
+        """Load, validate, and return all configuration data from the configs directory.
+
+        This is the primary public method of the class.  It performs three major
+        phases:
+
+        1. **YAML loading** – iterates over every ``.yaml`` file in the configured
+           directory, dispatches each to the appropriate ``_load_config_*`` helper
+           based on its ``document`` + ``version`` fields, and collects all parsed
+           configs into a single dictionary.
+        2. **JSON loading** – iterates over every ``.json`` file and loads external
+           data sources (currently only buildroot binary-relations files).
+        3. **Cross-validation** – removes views that reference non-existent
+           repositories or base views, adjusts view architectures to match their
+           repository's supported architectures, and optionally filters the entire
+           config set down to a subset of labels when ``--labels`` was passed on
+           the CLI.
+
+        Returns:
+            dict: A fully validated configuration dictionary with the following
+                top-level keys: ``repos``, ``envs``, ``workloads``, ``labels``,
+                ``views``, ``unwanteds``, ``buildroots``, and
+                ``buildroot_pkg_relations``.
+
+        Raises:
+            SettingsError: If ``allowed_arches`` is missing or empty in settings.
+            ConfigError: In strict mode, if any config file contains errors.
+        """
         log("")
 
         directory = self.settings["configs"]

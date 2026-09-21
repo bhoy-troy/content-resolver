@@ -1,3 +1,14 @@
+"""HTML page generation for the content-resolver static site.
+
+Renders Jinja2 templates into HTML files and writes them to the output
+directory configured in ``query.settings["output"]``.
+
+Each ``_generate_*`` helper is responsible for a specific section of the site
+(workloads, environments, views, maintainers, config pages, etc.).  The main
+entry point is :func:`generate_pages`, which calls all section generators in
+order and also handles static-file copying and the Jinja2 environment setup.
+"""
+
 import os
 import subprocess
 
@@ -8,6 +19,22 @@ from content_resolver.utils import dump_data, log
 
 
 def _generate_html_page(template_name, template_data, page_name, settings):
+    """Render a Jinja2 template and write the result as an HTML file.
+
+    The output filename is derived from *page_name* by replacing colons with
+    ``--``, taking only the basename (to prevent path-traversal), and appending
+    ``.html``.
+
+    Args:
+        template_name: Name of the Jinja2 template file (without the ``.html``
+            extension) to look up in the configured template environment.
+        template_data: Dict of variables to pass to the template.  If ``None``
+            or empty, an empty dict is used.  The key
+            ``"global_refresh_time_started"`` is always injected automatically.
+        page_name: Logical page identifier used to construct the output filename.
+        settings: Global settings dict; must contain ``"output"`` (directory)
+            and ``"jinja2_template_env"`` (a :class:`jinja2.Environment`).
+    """
     log(f"Generating the '{page_name}' page...")
 
     output = settings["output"]
@@ -35,6 +62,25 @@ def _generate_html_page(template_name, template_data, page_name, settings):
 
 
 def _generate_workload_pages(query):
+    """Generate all HTML pages related to workloads.
+
+    Produces the following page types for every applicable combination of
+    workload configuration, environment, repository, and architecture:
+
+    - **Workload overview** (``workload-overview--<workload>--<repo>``): a
+      summary across all environments for a given workload/repo pair.
+    - **Workload detail** (``workload--<workload_id>``): full package list for
+      a single resolved workload.
+    - **Workload dependencies** (``workload-dependencies--<workload_id>``):
+      dependency breakdown for a single resolved workload.
+    - **Compare arches** (``workload-cmp-arches--<workload>--<env>--<repo>``):
+      side-by-side package comparison across architectures.
+    - **Compare envs** (``workload-cmp-envs--<workload>--<repo>--<arch>``):
+      side-by-side package comparison across environments.
+
+    Args:
+        query: Populated :class:`~content_resolver.query.Query` instance.
+    """
     log("Generating workload pages...")
 
     # Workload overview pages
@@ -153,6 +199,22 @@ def _generate_workload_pages(query):
 
 
 def _generate_env_pages(query):
+    """Generate all HTML pages related to environments.
+
+    Produces the following page types:
+
+    - **Environment overview** (``env-overview--<env_conf_id>--<repo_id>``):
+      summary across all arches for a given env/repo pair.
+    - **Environment detail** (``env--<env_id>``): full package list for a
+      single resolved environment.
+    - **Environment dependencies** (``env-dependencies--<env_id>``): dependency
+      breakdown for a single resolved environment.
+    - **Compare arches** (``env-cmp-arches--<env_conf_id>--<repo_id>``):
+      side-by-side package comparison across architectures.
+
+    Args:
+        query: Populated :class:`~content_resolver.query.Query` instance.
+    """
     log("Generating env pages...")
 
     for env_conf_id in query.envs(None, None, None, output_change="env_conf_ids"):
@@ -228,6 +290,18 @@ def _generate_env_pages(query):
 
 
 def _generate_maintainer_pages(query):
+    """Generate HTML overview and workload pages for every maintainer.
+
+    For each maintainer, produces:
+
+    - ``maintainer--<maintainer>`` — overview page listing all their
+      workloads/environments and their success status.
+    - ``maintainer-workloads--<maintainer>`` — detailed workload listing for
+      the maintainer.
+
+    Args:
+        query: Populated :class:`~content_resolver.query.Query` instance.
+    """
     log("Generating maintainer pages...")
 
     for maintainer in query.maintainers():
@@ -249,6 +323,15 @@ def _generate_maintainer_pages(query):
 
 
 def _generate_config_pages(query):
+    """Generate HTML pages for all YAML configuration objects.
+
+    Produces index pages for each configuration type (repos, envs, workloads,
+    labels, views, unwanteds) as well as individual detail pages for each
+    configuration entry.
+
+    Args:
+        query: Populated :class:`~content_resolver.query.Query` instance.
+    """
     log("Generating config pages...")
 
     for conf_type in ["repos", "envs", "workloads", "labels", "views", "unwanteds"]:
@@ -309,6 +392,13 @@ def _generate_config_pages(query):
 
 
 def _generate_repo_pages(query):
+    """Generate per-arch HTML detail pages for every repository.
+
+    Each page is named ``repo--<repo_id>--<arch>``.
+
+    Args:
+        query: Populated :class:`~content_resolver.query.Query` instance.
+    """
     log("Generating repo pages...")
 
     for repo_id, repo in query.configs["repos"].items():
@@ -326,6 +416,22 @@ def _generate_repo_pages(query):
 
 
 def _generate_view_pages(query):
+    """Generate all HTML pages related to views.
+
+    For each view configuration, produces:
+
+    - ``view--<view_conf_id>`` — overview page.
+    - ``view-packages--<view_conf_id>`` — full binary package listing.
+    - ``view-sources--<view_conf_id>`` — full source package (SRPM) listing.
+    - ``view-unwanted--<view_conf_id>`` — unwanted package listing.
+    - ``view-workloads--<view_conf_id>`` — workload breakdown.
+    - ``view-errors--<view_conf_id>`` — resolution error listing.
+    - ``view-rpm--<view_conf_id>--<pkg_name>`` — per-RPM detail page and JSON.
+    - ``view-srpm--<view_conf_id>--<srpm_name>`` — per-SRPM detail page and JSON.
+
+    Args:
+        query: Populated :class:`~content_resolver.query.Query` instance.
+    """
     log("Generating view pages... (the new function)")
 
     for view_conf_id, view_conf in query.configs["views"].items():
@@ -401,6 +507,14 @@ def _generate_view_pages(query):
 
 
 def _dump_all_data(query):
+    """Serialize the full query state (data, configs, settings) to ``data.json``.
+
+    This is a diagnostic/debugging helper.  It is currently disabled in
+    :func:`generate_pages` because the output can be very large.
+
+    Args:
+        query: Populated :class:`~content_resolver.query.Query` instance.
+    """
     log("Dumping all data...")
 
     data = {
@@ -418,7 +532,28 @@ def _dump_all_data(query):
 
 
 def generate_pages(query):
+    """Orchestrate generation of the complete static HTML site.
 
+    Sets up the Jinja2 template environment, copies static assets, then calls
+    each section generator in order:
+
+    1. Jinja2 environment initialisation + static file copy
+    2. Landing page (``index.html``) and results page
+    3. Configuration pages (:func:`_generate_config_pages`)
+    4. Top-level listing pages (repos, envs, workloads, labels, views,
+       maintainers)
+    5. Repository pages (:func:`_generate_repo_pages`)
+    6. Maintainer pages (:func:`_generate_maintainer_pages`)
+    7. Environment pages (:func:`_generate_env_pages`)
+    8. Workload pages (:func:`_generate_workload_pages`)
+    9. View pages (:func:`_generate_view_pages`)
+    10. Errors page
+
+    Args:
+        query: Populated :class:`~content_resolver.query.Query` instance with
+            resolved data, configurations, and settings (including
+            ``"output"`` and ``"global_refresh_time_started"``).
+    """
     log("")
     log("###############################################################################")
     log("### Generating html pages! ####################################################")

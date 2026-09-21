@@ -37,11 +37,29 @@ from content_resolver.utils import (
 )
 
 
+# TODO: Create re-usable function that handles `pkg_placeholder_name_to_id` and pkg_placeholder_name_to_nevr
 def pkg_placeholder_name_to_id(placeholder_name):
+    """Convert a placeholder package name to its synthetic NEVRA identifier.
+
+    Args:
+        placeholder_name (str): The logical placeholder package name.
+
+    Returns:
+        str: A synthetic NEVRA string in the form
+            ``<name>-000-placeholder.placeholder``.
+    """
     return f"{placeholder_name}-000-placeholder.placeholder"
 
 
 def pkg_placeholder_name_to_nevr(placeholder_name):
+    """Convert a placeholder package name to its synthetic NEVR identifier.
+
+    Args:
+        placeholder_name (str): The logical placeholder package name.
+
+    Returns:
+        str: A synthetic NEVR string in the form ``<name>-000-placeholder``.
+    """
     return f"{placeholder_name}-000-placeholder"
 
 
@@ -92,8 +110,23 @@ def is_package_resolvable(base: Base, pkg_name: str) -> bool:
 
 
 def _get_build_deps_from_a_root_log(root_log):
-    """
-    Given a packages Koji root_log, find its build dependencies.
+    """Parse a Koji root.log file and extract the direct build dependencies.
+
+    The function implements a small state machine that walks through the log
+    text produced by mock/Koji (compatible with both DNF4 and DNF5 output
+    formats) and collects every package name that was installed in order to
+    satisfy the ``builddep`` step.
+
+    Args:
+        root_log (str): Full text content of a Koji ``root.log`` file.
+
+    Returns:
+        list[str]: Package names (without epoch/version/release/arch) that
+            were directly required by the build.
+
+    Raises:
+        KojiRootLogError: If the log contains an unexpected line length that
+            cannot be parsed.
     """
     required_pkgs = []
 
@@ -237,8 +270,25 @@ def _get_build_deps_from_a_root_log(root_log):
 
 
 def _get_koji_log_path(srpm_id, arch, koji_session):
-    """
-    Get koji log path for a given SRPM.
+    """Return the server-relative path of the ``root.log`` for an SRPM build.
+
+    Queries the Koji API to find the build associated with *srpm_id* and
+    locates the ``root.log`` file for the given *arch* (falling back to
+    ``noarch`` when needed).
+
+    Args:
+        srpm_id (str): SRPM NVR (name-version-release) used to look up the
+            RPM in Koji.
+        arch (str): Target architecture (e.g. ``x86_64``).
+        koji_session (koji.ClientSession): An authenticated Koji API session.
+
+    Returns:
+        str | None: The server path of the ``root.log`` file, or ``None`` if
+            no matching log was found for the requested architecture.
+
+    Raises:
+        KojiRootLogError: If the Koji API cannot be reached after
+            ``max_tries`` attempts.
     """
     max_tries = 10
     attempts = 0
@@ -266,8 +316,21 @@ def _get_koji_log_path(srpm_id, arch, koji_session):
 
 
 def _download_root_log_with_retry(root_log_url):
-    """
-    Download root.log file with retry logic.
+    """Download the content of a Koji ``root.log`` file, retrying on failure.
+
+    Makes up to ``max_tries`` HTTP GET requests, sleeping one second between
+    each attempt.  Sets appropriate ``Accept`` and ``User-Agent`` headers so
+    that the Koji file server returns the raw text log.
+
+    Args:
+        root_log_url (str): Fully-qualified URL of the ``root.log`` file on
+            the Koji files server.
+
+    Returns:
+        str: The decoded UTF-8 text content of the log file.
+
+    Raises:
+        KojiRootLogError: If the download fails on every attempt.
     """
     max_tries = 10
     attempts = 0
@@ -403,6 +466,30 @@ def process_single_srpm_root_log(work_item):
 
 
 class Analyzer:
+    """Orchestrates the full RPM content-resolver analysis pipeline.
+
+    The ``Analyzer`` class ties together repository metadata fetching,
+    environment and workload dependency resolution (via DNF5/libdnf5), Koji
+    buildroot log processing, view construction, and maintainer recommendation
+    generation.
+
+    The primary entry point is :meth:`analyze_things`, which runs every phase
+    in order and returns the fully-populated ``data`` dictionary consumed by
+    the query/renderer layers.
+
+    Attributes:
+        configs (dict): Parsed configuration objects (repos, envs, workloads,
+            views, labels, unwanteds, …).
+        settings (dict): Runtime settings (cache paths, parallelism limits,
+            feature flags, …).
+        data (dict): Accumulated analysis results produced by
+            :meth:`analyze_things`.
+        cache (dict): In-memory root-log dependency cache keyed by Koji ID,
+            architecture, and SRPM NVR.
+        metrics_data (list[dict]): Timestamped phase markers recorded by
+            :meth:`_record_metric`.
+    """
+
     ###############################################################################
     ### Analyzing stuff! ##########################################################
     ###############################################################################
@@ -434,6 +521,20 @@ class Analyzer:
     #
 
     def __init__(self, configs, settings):
+        """Initialise the Analyzer with configuration and runtime settings.
+
+        Loads the existing root-log dependency cache from disk (if present)
+        and validates its contents.
+
+        Args:
+            configs (dict): Full configuration dictionary produced by the
+                config manager, containing repos, envs, workloads, views,
+                labels, and unwanteds sections.
+            settings (dict): Runtime settings such as cache file paths,
+                parallelism limits (``max_subprocesses``, ``parallel_max``),
+                and feature flags (``dev_buildroot``,
+                ``dnf_cache_dir_override``, …).
+        """
         self.workload_queue = {}
         self.workload_queue_counter_total = 0
         self.workload_queue_counter_current = 0
@@ -468,6 +569,12 @@ class Analyzer:
             pass
 
     def _record_metric(self, name):
+        """Append a named, timestamped entry to the internal metrics list.
+
+        Args:
+            name (str): Human-readable label describing the phase or
+                checkpoint being recorded (e.g. ``"started analyze_things()"``).
+        """
         this_record = {
             "name": name,
             "timestamp": datetime.datetime.now(),
@@ -475,6 +582,12 @@ class Analyzer:
         self.metrics_data.append(this_record)
 
     def print_metrics(self):
+        """Print all recorded phase metrics with wall-clock times and deltas.
+
+        Iterates over :attr:`metrics_data` and logs each entry's timestamp
+        together with the elapsed time since the previous entry, giving a
+        quick overview of how long each analysis phase took.
+        """
         log("Additional metrics:")
         # TODO: use `enumerate(self.metrics_data)` instead of incrementing counter
         counter = 0
@@ -706,6 +819,30 @@ class Analyzer:
                 repo_config.get_excludepkgs_option().set(repo_data["exclude"])
 
     def _analyze_pkgs(self, repo, arch):
+        """Fetch and enumerate all packages available in a repository for one arch.
+
+        Creates a fresh DNF5 ``Base``, loads the repository metadata (with
+        module hotfixes enabled so that non-enabled stream packages are
+        visible), and returns a dictionary of every available package keyed
+        by its NEVRA string.
+
+        Args:
+            repo (dict): Repository configuration dict (as produced by the
+                config manager), including ``id``, ``name``, and ``source``
+                sub-keys.
+            arch (str): Target architecture (e.g. ``x86_64``).
+
+        Returns:
+            dict[str, dict]: Mapping of NEVRA → package metadata dict.  Each
+                value contains keys such as ``id``, ``name``, ``evr``,
+                ``nevr``, ``arch``, ``installsize``, ``description``,
+                ``summary``, ``source_name``, ``sourcerpm``, ``reponame``,
+                ``all_reponames``, and ``highest_priority_reponames``.
+
+        Raises:
+            RepoDownloadError: If repository metadata cannot be downloaded
+                after the maximum number of retries.
+        """
         log(f"Analyzing pkgs for {repo['name']} ({repo['id']}) {arch}")
 
         # TODO: Move away from context manager, only implemented to reduce changes from DNF4-> DNF5
@@ -868,6 +1005,18 @@ class Analyzer:
         return pkgs
 
     def _analyze_repos(self):
+        """Populate ``self.data["pkgs"]`` and ``self.data["repos"]`` for all repos.
+
+        Iterates over every configured repository and calls
+        :meth:`_analyze_pkgs` for each supported architecture to build the
+        full package catalogue.  Also fetches ``composeinfo.json`` metadata
+        (compose date, days-ago) for each repository that provides a
+        ``composeinfo`` URL.
+
+        Results are stored in:
+            - ``self.data["pkgs"][repo_id][arch]`` — package dicts
+            - ``self.data["repos"][repo_id]`` — repo-level metadata
+        """
         self.data["repos"] = {}
         for repo in self.configs["repos"].values():
             repo_id = repo["id"]
@@ -905,7 +1054,24 @@ class Analyzer:
 
     @staticmethod
     def _resolve_dep_names(reldeps, pkg_id, provides_index):
-        """Resolve reldeps to matching pkg_ids via the provides index."""
+        """Resolve a list of RPM dependency objects to provider package IDs.
+
+        Looks up each dependency's name in *provides_index* and collects the
+        full set of package IDs that satisfy it, excluding *pkg_id* itself
+        (to avoid self-dependency entries).
+
+        Args:
+            reldeps (iterable): Sequence of libdnf5 ``ReldepList`` objects
+                (e.g. from ``pkg.get_requires()``), each exposing a
+                ``get_name()`` method.
+            pkg_id (str): NEVRA of the package whose dependencies are being
+                resolved; used to exclude self-references.
+            provides_index (dict[str, set[str]]): Mapping from a provide name
+                to the set of package IDs that declare that provide.
+
+        Returns:
+            set[str]: Package IDs of all providers, excluding *pkg_id*.
+        """
         matched = set()
         for dep in reldeps:
             matched.update(provides_index.get(dep.get_name(), set()))
@@ -989,7 +1155,25 @@ class Analyzer:
         return relations
 
     def _analyze_env_without_leaking(self, env_conf, repo, arch):
+        """Analyze an environment in an isolated subprocess to prevent resource leaks.
 
+        DNF5/libdnf5 leaks memory and file descriptors when reused across
+        many analyses.  This wrapper spawns a fresh :class:`multiprocessing.Process`
+        that calls :meth:`_analyze_env_process` and communicates results back
+        via a ``multiprocessing.Queue``.
+
+        Args:
+            env_conf (dict): Environment configuration dict.
+            repo (dict): Repository configuration dict.
+            arch (str): Target architecture string.
+
+        Returns:
+            dict: Environment result dict as returned by :meth:`_analyze_env`.
+
+        Raises:
+            AnalysisError: If the subprocess terminates without placing a
+                result in the queue (i.e. it crashed).
+        """
         # DNF leaks memory and file descriptors :/
         #
         # So, this workaround runs it in a subprocess that should have its resources
@@ -1007,11 +1191,45 @@ class Analyzer:
         return queue_result.get()
 
     def _analyze_env_process(self, queue_result, env_conf, repo, arch):
+        """Subprocess target that runs :meth:`_analyze_env` and queues the result.
 
+        Intended to be run inside a :class:`multiprocessing.Process` so that
+        DNF5 resource leaks are confined to the child process.
+
+        Args:
+            queue_result (multiprocessing.Queue): Queue into which the
+                environment result dict is placed upon completion.
+            env_conf (dict): Environment configuration dict.
+            repo (dict): Repository configuration dict.
+            arch (str): Target architecture string.
+        """
         env = self._analyze_env(env_conf, repo, arch)
         queue_result.put(env)
 
     def _analyze_env(self, env_conf, repo, arch):
+        """Resolve all packages and dependencies for a single environment.
+
+        Creates a fresh DNF5 ``Base`` instance, loads the requested packages
+        and groups into a transaction, downloads and installs them into a
+        temporary installroot, and records the resulting package set together
+        with inter-package dependency relations.
+
+        Args:
+            env_conf (dict): Environment configuration dict containing
+                ``packages``, ``groups``, ``arch_packages``, and ``options``.
+            repo (dict): Repository configuration dict.
+            arch (str): Target architecture string.
+
+        Returns:
+            dict: Environment result containing:
+                - ``env_conf_id`` (str): Configuration ID.
+                - ``pkg_ids`` (list[str]): Resolved package NEVRAs.
+                - ``repo_id`` (str): Repository ID used.
+                - ``arch`` (str): Architecture.
+                - ``pkg_relations`` (dict): Inter-package dependency data.
+                - ``errors`` (dict): Error details (``non_existing_pkgs``,
+                  ``succeeded``, optional ``message``).
+        """
         env = {
             "env_conf_id": env_conf["id"],
             "pkg_ids": [],
@@ -1208,6 +1426,13 @@ class Analyzer:
         return env
 
     def _analyze_envs(self):
+        """Resolve all configured environments across all repos and arches.
+
+        Iterates over every environment configuration and, for each repository
+        and architecture it references, calls :meth:`_analyze_env` and stores
+        the result in ``self.data["envs"]`` keyed by
+        ``"<env_conf_id>:<repo_id>:<arch>"``.
+        """
         envs = {}
 
         # Look at all env configs...
@@ -1230,6 +1455,23 @@ class Analyzer:
         self.data["envs"] = envs
 
     def _return_failed_workload_env_err(self, workload_conf, env_conf, repo, arch):
+        """Return a pre-failed workload result for when its environment failed.
+
+        Used to short-circuit workload analysis when the corresponding
+        environment could not be resolved, so that the workload result still
+        carries a meaningful error message rather than being absent.
+
+        Args:
+            workload_conf (dict): Workload configuration dict.
+            env_conf (dict): Environment configuration dict.
+            repo (dict): Repository configuration dict.
+            arch (str): Target architecture string.
+
+        Returns:
+            dict: A workload result dict with ``succeeded=False`` and
+                ``env_succeeded=False``, containing a descriptive error
+                message and empty package lists.
+        """
         workload = {
             "workload_conf_id": workload_conf["id"],
             "env_conf_id": env_conf["id"],
@@ -1254,7 +1496,34 @@ class Analyzer:
         return workload
 
     def _analyze_workload(self, workload_conf, env_conf, repo, arch):
+        """Resolve one workload on top of a previously-installed environment.
 
+        Mounts the installroot created during :meth:`_analyze_env` and uses a
+        DNF5 goal to install all workload packages and their dependencies on
+        top of it.  Handles package placeholders, architecture-specific
+        packages, strict/non-strict missing-package behaviour, and DNF5
+        transaction problem detection.
+
+        Args:
+            workload_conf (dict): Workload configuration dict containing
+                ``packages``, ``groups``, ``arch_packages``,
+                ``package_placeholders``, ``options``, and ``labels``.
+            env_conf (dict): Environment configuration dict.
+            repo (dict): Repository configuration dict.
+            arch (str): Target architecture string.
+
+        Returns:
+            dict: Workload result dict containing:
+                - ``pkg_env_ids`` (list[str]): Package IDs from the base env.
+                - ``pkg_added_ids`` (list[str]): Package IDs added by this
+                  workload.
+                - ``pkg_placeholder_ids`` (list[str]): Placeholder package IDs.
+                - ``srpm_placeholder_names`` (list[str]): SRPM placeholder names.
+                - ``pkg_relations`` (dict): Inter-package dependency data.
+                - ``errors`` / ``warnings`` (dict): Error and warning details.
+                - ``succeeded`` (bool): Whether resolution succeeded.
+                - ``labels`` (list[str]): Labels shared between workload and env.
+        """
         # Figure out the workload labels
         # It can only have labels that are in both the workload_conf and the env_conf
         workload = {
@@ -1667,6 +1936,20 @@ class Analyzer:
         return workload
 
     def _analyze_workload_process(self, queue_result, workload_conf, env_conf, repo, arch):
+        """Subprocess target that runs :meth:`_analyze_workload` and queues the result.
+
+        Catches any unhandled exception and places a pre-failed workload dict
+        (containing the traceback) into the queue rather than letting the
+        child process crash silently.
+
+        Args:
+            queue_result (multiprocessing.Queue): Queue into which the
+                workload result dict is placed upon completion.
+            workload_conf (dict): Workload configuration dict.
+            env_conf (dict): Environment configuration dict.
+            repo (dict): Repository configuration dict.
+            arch (str): Target architecture string.
+        """
         try:
             workload = self._analyze_workload(workload_conf, env_conf, repo, arch)
             queue_result.put(workload)
@@ -1705,7 +1988,20 @@ class Analyzer:
             )
 
     async def _analyze_workloads_subset_async(self, task_queue, results):
+        """Process a list of workload tasks sequentially within one async coroutine.
 
+        Each task is dispatched to a :class:`multiprocessing.Process` running
+        :meth:`_analyze_workload_process`.  The coroutine polls the result
+        queue with exponential-style back-off (2 s → 20 s → 200 s) before
+        declaring a timeout and recording a failed workload entry.
+
+        Args:
+            task_queue (list[dict]): Ordered list of task dicts, each
+                containing ``workload_conf``, ``env_conf``, ``repo``, and
+                ``arch`` keys.
+            results (dict): Shared mapping of workload ID → result dict.
+                Updated in-place as tasks complete.
+        """
         for task in task_queue:
             workload_conf = task["workload_conf"]
             env_conf = task["env_conf"]
@@ -1815,7 +2111,16 @@ class Analyzer:
                 results[workload_id] = workload
 
     async def _analyze_workloads_async(self, results):
+        """Dispatch all queued workload tasks as concurrent async coroutines.
 
+        Creates one :func:`asyncio.create_task` per (repo, arch) bucket from
+        :attr:`workload_queue`, each backed by
+        :meth:`_analyze_workloads_subset_async`, and awaits them all.
+
+        Args:
+            results (dict): Shared mapping of workload ID → result dict that
+                is populated by the spawned coroutines.
+        """
         tasks = []
 
         for repo in self.workload_queue:
@@ -1829,7 +2134,18 @@ class Analyzer:
         log("DONE!")
 
     def _queue_workload_processing(self, workload_conf, env_conf, repo, arch):
+        """Add a workload task to the internal processing queue.
 
+        Organises pending tasks by ``repo_id`` and ``arch`` so that
+        :meth:`_analyze_workloads_async` can dispatch them in parallel buckets
+        without mixing different repos.
+
+        Args:
+            workload_conf (dict): Workload configuration dict.
+            env_conf (dict): Environment configuration dict.
+            repo (dict): Repository configuration dict.
+            arch (str): Target architecture string.
+        """
         repo_id = repo["id"]
 
         if repo_id not in self.workload_queue:
@@ -1849,12 +2165,27 @@ class Analyzer:
         self.workload_queue_counter_total += 1
 
     def _reset_workload_processing_queue(self):
+        """Clear the workload processing queue and reset progress counters.
+
+        Called before each fresh round of workload (or buildroot) processing
+        to ensure state from a previous run does not bleed into the current
+        one.
+        """
         self.workload_queue = {}
         self.workload_queue_counter_total = 0
         self.workload_queue_counter_current = 0
 
     def _analyze_workloads(self):
+        """Resolve all workloads across all matching environments, repos, and arches.
 
+        Matches workload configs to environment configs via shared labels,
+        then for each valid (workload, env, repo, arch) combination either
+        queues the workload for async processing (when the env succeeded) or
+        records a pre-failed result via :meth:`_return_failed_workload_env_err`.
+
+        Results are stored in ``self.data["workloads"]`` keyed by
+        ``"<workload_conf_id>:<env_conf_id>:<repo_id>:<arch>"``.
+        """
         # Initialise
         self.data["workloads"] = {}
         self._reset_workload_processing_queue()
@@ -1918,6 +2249,28 @@ class Analyzer:
         asyncio.run(self._analyze_workloads_async(self.data["workloads"]))
 
     def _init_view_pkg(self, input_pkg, arch, placeholder=False, level=0):
+        """Initialise a per-view binary package entry from a raw package dict.
+
+        Creates a new dict that merges the raw package metadata with empty
+        per-view tracking sets (workload memberships, buildroot memberships,
+        dependency relation sets, level buckets, etc.).
+
+        Args:
+            input_pkg (dict): Raw package metadata dict (from
+                ``self.data["pkgs"]``) or, when *placeholder* is ``True``, a
+                placeholder configuration dict.
+            arch (str): Architecture this view entry is for (stored as
+                ``view_arch``).
+            placeholder (bool): When ``True``, the entry is created from a
+                package placeholder rather than a real package.  Defaults to
+                ``False``.
+            level (int): Number of buildroot levels to pre-initialise.  Level
+                0 corresponds to runtime packages; levels ≥ 1 are buildroot
+                levels.  Defaults to ``0``.
+
+        Returns:
+            dict: A fully-initialised per-view package entry.
+        """
         if placeholder:
             pkg = {
                 "id": pkg_placeholder_name_to_id(input_pkg["name"]),
@@ -1987,7 +2340,21 @@ class Analyzer:
         return pkg
 
     def _init_view_srpm(self, pkg, level=0):
+        """Initialise a per-view source package (SRPM) entry from a binary package dict.
 
+        Derives the SRPM ID from the binary package's ``sourcerpm`` field and
+        creates a new dict with empty tracking sets for workload memberships,
+        buildroot memberships, and level data.
+
+        Args:
+            pkg (dict): Binary package metadata dict (containing at minimum
+                ``sourcerpm``, ``source_name``, and ``reponame``).
+            level (int): Number of buildroot levels to pre-initialise in
+                addition to level 0.  Defaults to ``0``.
+
+        Returns:
+            dict: A fully-initialised per-view source package entry.
+        """
         srpm_id = pkg["sourcerpm"].rsplit(".src.rpm")[0]
 
         srpm = {
@@ -2034,6 +2401,24 @@ class Analyzer:
         return srpm
 
     def _analyze_view(self, view_conf, arch, views):
+        """Build a single per-arch view by aggregating resolved workload packages.
+
+        Collects every workload that matches the view's labels and repository,
+        merges their package and source-package data into unified per-view
+        structures, and (for addon views) removes packages that already appear
+        in the parent base view.
+
+        Args:
+            view_conf (dict): View configuration dict (type, labels,
+                repository, architectures, optional ``base_view_id``).
+            arch (str): Architecture to produce the view for.
+            views (dict): Mapping of already-completed view IDs to view dicts;
+                required for addon views to look up the base view.
+
+        Returns:
+            dict: Completed view dict with keys ``id``, ``view_conf_id``,
+                ``arch``, ``workload_ids``, ``pkgs``, and ``source_pkgs``.
+        """
         view_conf_id = view_conf["id"]
 
         log(f"Analyzing view: {view_conf['name']} ({view_conf_id}) for {arch}")
@@ -2212,6 +2597,17 @@ class Analyzer:
         return view
 
     def _analyze_views(self):
+        """Build all configured views and store them in ``self.data["views"]``.
+
+        Processes views in two phases:
+        1. **Compose views** — standard views analysed first because addon
+           views may depend on them.
+        2. **Addon views** — processed for the intersection of their own
+           architectures and those of their parent base view.
+
+        Results are stored in ``self.data["views"]`` keyed by
+        ``"<view_conf_id>:<arch>"``.
+        """
         log("")
         log("=====  Starting View Analysis =====")
         log("")
@@ -2264,6 +2660,18 @@ class Analyzer:
         self.data["views"] = views
 
     def _populate_buildroot_with_view_srpms(self, view_conf, arch):
+        """Seed the buildroot data structures from the SRPMs in a compose view.
+
+        Iterates over all source packages in the specified view and initialises
+        entries in ``self.data["buildroot"]["srpms"]`` and, for views that use
+        the ``root_logs`` buildroot strategy, in
+        ``self.data["buildroot"]["koji_srpms"]`` and
+        ``self.data["buildroot"]["koji_urls"]``.
+
+        Args:
+            view_conf (dict): View configuration dict for a compose-type view.
+            arch (str): Architecture to seed the buildroot data for.
+        """
         view_conf_id = view_conf["id"]
 
         log(f"Initialising buildroot packages of: {view_conf['name']} ({view_conf_id}) for {arch}")
@@ -2341,8 +2749,22 @@ class Analyzer:
         log("")
 
     def _resolve_srpms_using_root_logs_parallel(self, pass_counter):
-        """
-        This function is idempotent!
+        """Download and parse Koji root.log files in parallel to extract build dependencies.
+
+        This function is **idempotent** — re-running it will skip SRPMs that
+        are already cached or have been processed in a previous pass.
+
+        Uses a :class:`~concurrent.futures.ProcessPoolExecutor` to fetch and
+        parse root logs concurrently (up to ``settings["parallel_max"]``
+        workers).  Successful results are written into the in-memory cache
+        (``self.cache["root_log_deps"]["next"]``) and flushed to disk at the
+        end of each pass.
+
+        Reports suspicious results (zero or very few dependencies) after
+        processing.
+
+        Args:
+            pass_counter (int): Current pass number, used for logging context.
         """
         log(f"== Resolving SRPMs using root logs - pass {pass_counter} (PARALLEL) ========")
 
@@ -2540,7 +2962,20 @@ class Analyzer:
         log("")
 
     def _apply_srpm_result(self, work_item, result):
-        """Apply worker result back to main data structures"""
+        """Apply a root-log worker result back into the in-memory data structures.
+
+        Updates the ``root_log_deps`` cache (``"next"`` slot) and sets the
+        ``directly_required_pkg_names`` on the corresponding SRPM entry in
+        ``self.data["buildroot"]["koji_srpms"]``.
+
+        Args:
+            work_item (dict): The original work item dict that was submitted
+                to the worker, containing ``koji_id``, ``arch``, and
+                ``srpm_id``.
+            result (dict): Worker result dict returned by
+                :func:`process_single_srpm_root_log`, containing ``deps``
+                (list of package name strings) and optional ``error``.
+        """
         koji_id = work_item["koji_id"]
         arch = work_item["arch"]
         srpm_id = work_item["srpm_id"]
@@ -2555,7 +2990,22 @@ class Analyzer:
         self.data["buildroot"]["koji_srpms"][koji_id][arch][srpm_id]["directly_required_pkg_names"].update(deps)
 
     def _analyze_build_groups(self):
+        """Resolve the base build group (``@build``) for every repo/arch combination.
 
+        Constructs a synthetic environment configuration representing the
+        minimal build environment (either the ``@build`` group or a custom
+        ``base_buildroot_override`` package list) and calls
+        :meth:`_analyze_env` for each repo/arch pair found in
+        ``self.data["buildroot"]["srpms"]``.
+
+        Results are stored in
+        ``self.data["buildroot"]["build_groups"][repo_id][arch]``.
+
+        Raises:
+            BuildGroupAnalysisError: If the build group cannot be resolved
+                for any repo/arch combination (which would make buildroot
+                analysis impossible).
+        """
         log("")
         log("Analyzing build groups...")
         log("")
@@ -2599,9 +3049,23 @@ class Analyzer:
         log("")
 
     def _expand_buildroot_srpms(self):
-        # This function is idempotent!
-        # That means it can be run many times without affecting the old results.
+        """Discover new SRPMs introduced as transitive buildroot dependencies.
 
+        This function is **idempotent** — it can be called multiple times
+        without corrupting previously collected results.
+
+        Scans the ``pkg_relations`` of every already-processed SRPM in the
+        buildroot and checks whether any of the packages they pulled in belong
+        to a source package (SRPM) that has not yet been registered.  Newly
+        discovered SRPMs are initialised in both
+        ``self.data["buildroot"]["srpms"]`` and
+        ``self.data["buildroot"]["koji_srpms"]`` so they can be resolved in
+        the next pass.
+
+        Returns:
+            int: Number of new SRPMs added.  A return value of ``0`` signals
+                that the iterative expansion has converged.
+        """
         log("Expanding the SRPM set...")
 
         counter = 0
@@ -2667,9 +3131,21 @@ class Analyzer:
         return counter
 
     def _analyze_srpm_buildroots(self, pass_counter):
-        # This function is idempotent!
-        # That means it can be run many times without affecting the old results.
+        """Resolve the full buildroot dependency tree for each unprocessed SRPM.
 
+        This function is **idempotent** — SRPMs that have already been
+        processed (``srpm["processed"] == True``) are skipped.
+
+        For each unprocessed SRPM it constructs synthetic workload and
+        environment config dicts (using the SRPM's direct build-dependency
+        names as the workload's package list and the pre-resolved build group
+        as the environment) and queues them for async resolution via
+        :meth:`_analyze_workloads_async`.
+
+        Args:
+            pass_counter (int): Current iteration pass number, used for
+                logging context.
+        """
         log("")
         log("Analyzing SRPM buildroots...")
         log("")
@@ -2759,7 +3235,22 @@ class Analyzer:
         log("")
 
     def _analyze_buildroot(self):
+        """Orchestrate the complete iterative buildroot analysis.
 
+        Disables recommends queries (a performance optimisation) and runs the
+        full multi-pass buildroot pipeline:
+
+        1. Seed ``self.data["buildroot"]`` from compose-view SRPMs.
+        2. Resolve the base build group for every repo/arch.
+        3. Iterate until convergence:
+           a. Fetch build-dependency package names from Koji root logs
+              (:meth:`_resolve_srpms_using_root_logs_parallel`).
+           b. Resolve each SRPM's full buildroot via DNF
+              (:meth:`_analyze_srpm_buildroots`).
+           c. Discover any new SRPMs introduced by the resolved buildroots
+              (:meth:`_expand_buildroot_srpms`).
+           d. Stop when no new SRPMs are found.
+        """
         self._global_performance_hack_run_recommends_queries = False
 
         self._record_metric("started _analyze_buildroot()")
@@ -2843,7 +3334,19 @@ class Analyzer:
             )
 
     def _add_buildroot_to_view(self, view_conf, arch):
+        """Extend a view with packages from all SRPM buildroots, level by level.
 
+        Starting from the set of source packages already present in the view
+        (level 0 — runtime), iteratively walks each SRPM's resolved buildroot
+        packages, adding them to the view at increasing buildroot levels (1, 2,
+        …) and discovering new source packages at each level until no new
+        packages are introduced.
+
+        Args:
+            view_conf (dict): View configuration dict for a compose-type view
+                that uses the ``root_logs`` buildroot strategy.
+            arch (str): Architecture to process.
+        """
         view_conf_id = view_conf["id"]
 
         view_id = f"{view_conf_id}:{arch}"
@@ -2977,7 +3480,12 @@ class Analyzer:
                 break
 
     def _add_buildroot_to_views(self):
+        """Add buildroot package data to all compose views that use the ``root_logs`` strategy.
 
+        Iterates over every compose-type view configuration and calls
+        :meth:`_add_buildroot_to_view` for each of its architectures.  Addon
+        views are not yet supported and are skipped.
+        """
         log("")
         log("Adding Buildroot to views...")
         log("")
@@ -2998,6 +3506,19 @@ class Analyzer:
         log("")
 
     def _init_pkg_or_srpm_relations_fields(self, target_pkg, type=None):
+        """Add all cross-arch relation tracking fields to a package or SRPM dict.
+
+        Initialises empty sets and dicts for workload memberships, buildroot
+        memberships, unwanted-package flags, level data, and maintainer
+        recommendation fields on *target_pkg* in-place.  When ``type="rpm"``
+        is specified, additional RPM-only dependency-of fields (by NEVR and by
+        name) are also added.
+
+        Args:
+            target_pkg (dict): The cross-arch package or SRPM dict to mutate.
+            type (str | None): Either ``"rpm"`` (binary package) or ``None``
+                / ``"srpm"`` (source package).  Defaults to ``None``.
+        """
         # I kept them all listed so they're easy to copy
 
         # Workload IDs
@@ -3053,7 +3574,28 @@ class Analyzer:
             target_pkg["reverse_weak_dependency_of_pkg_names"] = {}
 
     def _populate_pkg_or_srpm_relations_fields(self, target_pkg, source_pkg, type=None, view=None):
+        """Merge arch-specific package relation data into the cross-arch aggregate.
 
+        Called once per architecture for each package/SRPM to fold workload
+        membership sets, buildroot SRPM ID sets, unwanted-package flags, level
+        data, and (for RPMs) reverse dependency information from *source_pkg*
+        into *target_pkg*.
+
+        Args:
+            target_pkg (dict): Cross-arch aggregate dict initialised by
+                :meth:`_init_pkg_or_srpm_relations_fields`.
+            source_pkg (dict): Single-arch package or SRPM dict from
+                ``self.data["views"][view_id]["pkgs"]`` or ``["source_pkgs"]``.
+            type (str | None): ``"rpm"`` or ``"srpm"`` / ``None``.  When
+                ``"rpm"``, hard/weak/reverse-weak dependency fields are also
+                populated.  Defaults to ``None``.
+            view (dict | None): The per-arch view dict.  Required when
+                ``type="rpm"`` (used to look up reverse-dependency packages).
+
+        Raises:
+            ValueError: If ``type="rpm"`` is specified without providing a
+                *view*.
+        """
         # source_pkg is the arch-specific binary package
         # target_pkg is a representation of that pages for all arches
         #
@@ -3221,7 +3763,17 @@ class Analyzer:
         # TODO: add the levels
 
     def _generate_views_all_arches(self):
+        """Aggregate per-arch view data into unified cross-arch view summaries.
 
+        For every view configuration, combines data from all supported
+        architectures into a single ``views_all_arches`` dict that groups
+        packages by name (``pkgs_by_name``), by NEVR (``pkgs_by_nevr``), and
+        source packages by name (``source_pkgs_by_name``).  Also computes
+        per-category package/SRPM counts (runtime, env, req, dep, build, …).
+
+        Results are stored in ``self.data["views_all_arches"]`` keyed by
+        view configuration ID.
+        """
         views_all_arches = {}
 
         for view_conf_id, view_conf in self.configs["views"].items():
@@ -3484,7 +4036,17 @@ class Analyzer:
         self.data["views_all_arches"] = views_all_arches
 
     def _add_unwanted_packages_to_view(self, view, view_conf):
+        """Mark packages and SRPMs as unwanted within a single per-arch view.
 
+        Finds all exclusion-list configurations whose labels overlap with the
+        view's labels, then sets ``unwanted_completely_in_list_ids`` on every
+        matching binary package and source package entry in the view.
+
+        Args:
+            view (dict): Per-arch view dict (from ``self.data["views"]``).
+            view_conf (dict): View configuration dict containing the view's
+                label list.
+        """
         arch = view["arch"]
 
         # Find exclusion lists mathing this view's label(s)
@@ -3545,7 +4107,12 @@ class Analyzer:
                 view["source_pkgs"][srpm_id]["unwanted_completely_in_list_ids"].update(list_ids)
 
     def _add_unwanted_packages_to_views(self):
+        """Apply unwanted-package annotations to all eligible views.
 
+        Iterates over every compose-type view that uses the ``root_logs``
+        buildroot strategy and calls :meth:`_add_unwanted_packages_to_view`
+        for each of its architectures.
+        """
         log("")
         log("Adding Unwanted Packages to views...")
         log("")
@@ -3563,7 +4130,29 @@ class Analyzer:
                         self._add_unwanted_packages_to_view(view, view_conf)
 
     def _recommend_maintainers(self):
+        """Compute maintainer recommendations for every source package in all views.
 
+        Uses a score-based propagation algorithm:
+
+        * **Score** — a ``(level, sublevel)`` tuple where ``level`` 0 is
+          runtime and higher levels are buildroot levels; ``sublevel`` 0 means
+          directly required and higher sublevels are transitive dependencies.
+        * Packages explicitly required by a workload receive the workload's
+          maintainer at score ``(0, 0)``.
+        * Packages pulled in as runtime dependencies are assigned at
+          incrementing sublevels within the same level.
+        * Build dependencies of the previous level's SRPMs start a new level.
+
+        After propagation, the maintainer(s) with the best (lowest) score and
+        the highest dependency-count are elected as ``best_maintainers`` for
+        each SRPM.
+
+        Results are written into
+        ``self.data["views_all_arches"][view_conf_id]["pkgs_by_name"]`` and
+        ``self.data["views_all_arches"][view_conf_id]["source_pkgs_by_name"]``
+        under the ``maintainer_recommendation``,
+        ``maintainer_recommendation_details``, and ``best_maintainers`` keys.
+        """
         # Packages can be on one or more _levels_:
         #   level 0 is runtime
         #   level 1 is build deps of the previous level
@@ -4004,6 +4593,26 @@ class Analyzer:
         log("")
 
     def analyze_things(self):
+        """Run the full analysis pipeline and return the populated data dict.
+
+        Orchestrates all analysis phases in order inside a shared temporary
+        directory:
+
+        1. :meth:`_analyze_repos` — enumerate available packages per repo/arch.
+        2. :meth:`_analyze_envs` — resolve all environment package sets.
+        3. :meth:`_analyze_workloads` — resolve all workload package sets.
+        4. :meth:`_analyze_views` — build per-arch views from workloads.
+        5. :meth:`_analyze_buildroot` — resolve SRPM buildroots (iterative).
+        6. :meth:`_add_buildroot_to_views` — extend views with buildroot data.
+        7. :meth:`_add_unwanted_packages_to_views` — mark unwanted packages.
+        8. :meth:`_generate_views_all_arches` — aggregate cross-arch views.
+        9. :meth:`_recommend_maintainers` — compute maintainer recommendations.
+
+        Returns:
+            dict: The fully-populated ``self.data`` dict, containing ``pkgs``,
+                ``repos``, ``envs``, ``workloads``, ``views``,
+                ``views_all_arches``, and ``buildroot`` sections.
+        """
         log("")
         log("###############################################################################")
         log("### Analyzing stuff! ##########################################################")

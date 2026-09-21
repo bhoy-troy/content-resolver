@@ -1,27 +1,30 @@
 class SettingsError(Exception):
-    # Error in global settings for Feedback Pipeline
-    # Settings to be implemented, now hardcoded below
-    pass
+    """Raised when a required global setting is missing or invalid.
+
+    Currently, settings are largely hard-coded; this exception is reserved for
+    future validation of the settings dict passed to the analyser.
+    """
 
 
 class ConfigError(Exception):
-    # Error in user-provided configs
-    pass
+    """Raised when a user-provided YAML configuration file is invalid.
+
+    Examples include missing required keys, wrong value types, or referencing
+    an unknown repository / environment / workload.
+    """
 
 
 class RepoDownloadError(Exception):
-    # Error in downloading repodata
-    pass
+    """Raised when repository metadata cannot be downloaded or parsed."""
 
 
 class BuildGroupAnalysisError(Exception):
-    # Error while processing buildroot build group
-    pass
+    """Raised when the buildroot build-group configuration cannot be processed."""
 
 
 class KojiRootLogError(Exception):
-    pass
+    """Raised when a Koji root.log file cannot be fetched or parsed."""
 
 
 class AnalysisError(Exception):
-    pass
+    """Raised for general errors that occur during the package resolution analysis."""

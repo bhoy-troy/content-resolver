@@ -1,9 +1,33 @@
+"""Data-file generation for the content-resolver output.
+
+Generates JSON and plain-text artefacts that are consumed by the frontend and
+by external tooling.  All public functions accept a fully-populated
+:class:`~content_resolver.query.Query` object and write their output to the
+directory specified in ``query.settings["output"]``.
+
+The main entry point is :func:`generate_data_files`, which orchestrates all
+individual generators.
+"""
+
 import os
 
 from content_resolver.utils import dump_data, log
 
 
 def _generate_json_file(data, page_name, settings):
+    """Serialise *data* to a JSON file in the configured output directory.
+
+    The file name is derived from *page_name* by replacing colons with ``--``
+    and appending ``.json``.
+
+    Args:
+        data: Python object to serialise (sets are handled by
+            :class:`~content_resolver.utils.SetEncoder`).
+        page_name: Logical name of the page/dataset, used to construct the
+            output filename.
+        settings: Global settings dict; must contain an ``"output"`` key with
+            the output directory path.
+    """
     log(f"Generating the '{page_name}' JSON file...")
 
     output = settings["output"]
@@ -17,7 +41,16 @@ def _generate_json_file(data, page_name, settings):
 
 
 def _generate_txt_file(data_list, file_name, settings):
+    """Write a plain-text file with one list item per line.
 
+    The file name is derived from *file_name* by replacing colons with ``--``
+    and appending ``.txt``.
+
+    Args:
+        data_list: Iterable of strings to write, one per line.
+        file_name: Logical name used to construct the output filename.
+        settings: Global settings dict; must contain an ``"output"`` key.
+    """
     file_contents = "\n".join(data_list)
 
     filename = f"{file_name.replace(':', '--')}.txt"
@@ -30,32 +63,36 @@ def _generate_txt_file(data_list, file_name, settings):
 
 
 def _generate_view_lists(query):
+    """Generate per-arch and all-arch plain-text package lists for every view.
+
+    For each view configuration and architecture combination the following list
+    types are produced:
+
+    - ``view-all-binary-package-list`` — all RPM NEVRAs in the view
+    - ``view-all-binary-package-nevr-list`` — all RPM NEVRs
+    - ``view-all-binary-package-name-list`` — all RPM names
+    - ``view-all-source-package-list`` — all SRPM NEVRs
+    - ``view-all-source-package-name-list`` — all SRPM names
+    - ``view-binary-package-list`` — runtime RPM NEVRAs
+    - ``view-binary-package-nevr-list`` — runtime RPM NEVRs
+    - ``view-binary-package-name-list`` — runtime RPM names
+    - ``view-source-package-list`` — runtime SRPM NEVRs
+    - ``view-source-package-name-list`` — runtime SRPM names
+    - ``view-buildroot-package-list`` — build-root RPM NEVRAs
+    - ``view-buildroot-package-nevr-list`` — build-root RPM NEVRs
+    - ``view-buildroot-package-name-list`` — build-root RPM names
+    - ``view-buildroot-source-package-list`` — build-root SRPM NEVRs
+    - ``view-buildroot-source-package-name-list`` — build-root SRPM names
+
+    Each list is written both as an arch-specific file (``<list>--<view>--<arch>.txt``)
+    and as a combined all-arch file (``<list>--<view>.txt``).
+
+    Args:
+        query: Populated :class:`~content_resolver.query.Query` instance.
+    """
     log("Generating view lists...")
 
     for view_conf_id, view_conf in query.configs["views"].items():
-        # all      RPM    NEVRAs      view-all-binary-package-list
-        # all      RPM    NEVRs       view-all-binary-package-nevr-list
-        # all      RPM    Names       view-all-binary-package-name-list
-        #
-        # all      SRPM   NEVRs       view-all-source-package-list
-        # all      SRPM   Names       view-all-source-package-name-list
-        #
-        #
-        # runtime  RPM    NEVRAs      view-binary-package-list
-        # runtime  RPM    NEVRs       view-binary-package-nevr-list
-        # runtime  RPM    Names       view-binary-package-name-list
-        #
-        # runtime  SRPM   NEVRs       view-source-package-list
-        # runtime  SRPM   Names       view-source-package-name-list
-        #
-        #
-        # build    RPM    NEVRAs      view-buildroot-package-list
-        # build    RPM    NEVRs       view-buildroot-package-nevr-list
-        # build    RPM    Names       view-buildroot-package-name-list
-        #
-        # build    SRPM   NEVRs       view-buildroot-package-nevr-list
-        # build    SRPM   Names       view-buildroot-source-package-name-list
-
         all_arches_lists = {}
 
         for arch in view_conf["architectures"]:
@@ -141,7 +178,18 @@ def _generate_view_lists(query):
 
 
 def _generate_env_json_files(query):
+    """Generate JSON data files for every environment configuration and result.
 
+    For each environment configuration, writes:
+
+    - A config JSON file (``env-conf--<env_conf_id>.json``) containing the raw
+      configuration dict.
+    - A result JSON file (``env--<env_id>.json``) for every resolved
+      ``env_id``, containing the resolved data and the package query results.
+
+    Args:
+        query: Populated :class:`~content_resolver.query.Query` instance.
+    """
     log("Generating JSON files for environments...")
 
     # == envs
@@ -192,7 +240,17 @@ def _generate_env_json_files(query):
 
 
 def _generate_workload_json_files(query):
+    """Generate JSON data files for every workload configuration and result.
 
+    For each workload configuration, writes:
+
+    - A config JSON file (``workload-conf--<workload_conf_id>.json``).
+    - A result JSON file (``workload--<workload_id>.json``) for every resolved
+      ``workload_id``, including the package query results.
+
+    Args:
+        query: Populated :class:`~content_resolver.query.Query` instance.
+    """
     log("Generating JSON files for workloads...")
 
     # == Workloads
@@ -243,7 +301,21 @@ def _generate_workload_json_files(query):
 
 
 def _generate_view_json_files(query):
+    """Generate JSON data files for every view configuration.
 
+    For each view, writes three JSON files:
+
+    - ``view-packages--<view_conf_id>.json`` — a subset of binary package
+      fields (name, source name, arches, workload membership, level, etc.).
+    - ``view-sources--<view_conf_id>.json`` — a subset of source package
+      (SRPM) fields (name, arches, best maintainers, buildroot relationships,
+      etc.).
+    - ``view-workloads--<view_conf_id>.json`` — the aggregated workload data
+      for the view across all architectures.
+
+    Args:
+        query: Populated :class:`~content_resolver.query.Query` instance.
+    """
     log("Generating JSON files for views...")
     for view_conf_id, view_conf in query.configs["views"].items():
         view_all_arches = query.data["views_all_arches"][view_conf_id]
@@ -342,7 +414,14 @@ def _generate_view_json_files(query):
 
 
 def _generate_maintainers_json_file(query):
+    """Generate a single JSON file summarising all maintainers.
 
+    Writes ``maintainers.json`` to the output directory using the data
+    returned by :meth:`~content_resolver.query.Query.maintainers`.
+
+    Args:
+        query: Populated :class:`~content_resolver.query.Query` instance.
+    """
     log("Generating the maintainers json file...")
 
     maintainer_data = query.maintainers()
@@ -353,7 +432,20 @@ def _generate_maintainers_json_file(query):
 
 
 def generate_data_files(query):
+    """Orchestrate generation of all data files for the current run.
 
+    Calls each individual data-file generator in order:
+
+    1. Plain-text view package lists (:func:`_generate_view_lists`)
+    2. Environment JSON files (:func:`_generate_env_json_files`)
+    3. Workload JSON files (:func:`_generate_workload_json_files`)
+    4. View JSON files (:func:`_generate_view_json_files`)
+    5. Maintainers JSON file (:func:`_generate_maintainers_json_file`)
+
+    Args:
+        query: Populated :class:`~content_resolver.query.Query` instance with
+            resolved data, configurations, and settings.
+    """
     log("")
     log("###############################################################################")
     log("### Generating data files! ####################################################")
