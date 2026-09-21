@@ -125,10 +125,11 @@ class ConfigManager:
                     log(f"  Warning: {document_id}.yaml lists an unsupported architecture: {arch}. Moving on...")
                     continue
                 config["source"]["architectures"].append(str(arch))
-        except KeyError:
+        except KeyError as err:
             raise ConfigError(
-                f"'{document_id}.yaml' - There's something wrong with the mandatory fields. Sorry I don't have more specific info."
-            )
+                f"'{document_id}.yaml' - There's something wrong with the mandatory fields. "
+                f"Sorry I don't have more specific info."
+            ) from err
 
         for id, repo_data in document["data"]["source"]["repos"].items():
             name = repo_data.get("name", id)
@@ -199,10 +200,11 @@ class ConfigManager:
             for repo in document["data"]["labels"]:
                 config["labels"].append(str(repo))
 
-        except KeyError:
+        except KeyError as err:
             raise ConfigError(
-                f"'{document_id}.yaml' - There's something wrong with the mandatory fields. Sorry I don't have more specific info."
-            )
+                f"'{document_id}.yaml' - There's something wrong with the mandatory fields. "
+                f"Sorry I don't have more specific info."
+            ) from err
 
         # Step 2: Optional fields
 
@@ -279,10 +281,11 @@ class ConfigManager:
             for repo in document["data"]["labels"]:
                 config["labels"].append(str(repo))
 
-        except KeyError:
+        except KeyError as err:
             raise ConfigError(
-                f"'{document_id}.yaml' - There's something wrong with the mandatory fields. Sorry I don't have more specific info."
-            )
+                f"'{document_id}.yaml' - There's something wrong with the mandatory fields. "
+                f"Sorry I don't have more specific info."
+            ) from err
 
         # Step 2: Optional fields
 
@@ -407,10 +410,11 @@ class ConfigManager:
             # for humans to read. In Fedora, a FAS nick is recommended.
             config["maintainer"] = str(document["data"]["maintainer"])
 
-        except KeyError:
+        except KeyError as err:
             raise ConfigError(
-                f"'{document_id}.yaml' - There's something wrong with the mandatory fields. Sorry I don't have more specific info."
-            )
+                f"'{document_id}.yaml' - There's something wrong with the mandatory fields. "
+                f"Sorry I don't have more specific info."
+            ) from err
 
         # Step 2: Optional fields
         # none here
@@ -445,10 +449,10 @@ class ConfigManager:
             # Choose one repository that gets used as a source.
             config["repository"] = str(document["data"]["repository"])
 
-        except KeyError:
+        except KeyError as err:
             raise ConfigError(
                 f"'{document_id}.yaml' - There's something wrong with the mandatory fields. Sorry I don't have more specific info."
-            )
+            ) from err
 
         # Step 2: Optional fields
 
@@ -522,10 +526,11 @@ class ConfigManager:
             config["base_view_id"] = str(document["data"]["base_view_id"])
             config["repository"] = str(document["data"]["repository"])
 
-        except KeyError:
+        except KeyError as err:
             raise ConfigError(
-                f"'{document_id}.yaml' - There's something wrong with the mandatory fields. Sorry I don't have more specific info."
-            )
+                f"'{document_id}.yaml' - There's something wrong with the mandatory fields. "
+                f"Sorry I don't have more specific info."
+            ) from err
 
         # Step 2: Optional fields
 
@@ -595,10 +600,11 @@ class ConfigManager:
             for repo in document["data"]["labels"]:
                 config["labels"].append(str(repo))
 
-        except KeyError:
+        except KeyError as err:
             raise ConfigError(
-                f"'{document_id}.yaml' - There's something wrong with the mandatory fields. Sorry I don't have more specific info."
-            )
+                f"'{document_id}.yaml' - There's something wrong with the mandatory fields. "
+                f"Sorry I don't have more specific info."
+            ) from err
 
         # Step 2: Optional fields
 
@@ -655,10 +661,11 @@ class ConfigManager:
             # What view is this for
             config["view_id"] = str(document["data"]["view_id"])
 
-        except KeyError:
+        except KeyError as err:
             raise ConfigError(
-                f"'{document_id}.yaml' - There's something wrong with the mandatory fields. Sorry I don't have more specific info."
-            )
+                f"'{document_id}.yaml' - There's something wrong with the mandatory fields. "
+                f"Sorry I don't have more specific info."
+            ) from err
 
         # Step 2: Optional fields
         config["base_buildroot"] = {}
@@ -720,10 +727,11 @@ class ConfigManager:
             # pkg_relations
             config["pkg_relations"] = document["data"]["pkgs"]
 
-        except KeyError:
+        except KeyError as err:
             raise ConfigError(
-                f"'{document_id}.yaml' - There's something wrong with the mandatory fields. Sorry I don't have more specific info."
-            )
+                f"'{document_id}.yaml' - There's something wrong with the mandatory fields. "
+                f"Sorry I don't have more specific info."
+            ) from err
 
         return config
 
@@ -962,8 +970,7 @@ class ConfigManager:
                 log(f"  |  {message}")
             log("  -------------------------------------------------------------------------")
             log("")
-            # FIXME: settings may have no reference
-            if settings.get("strict", False):
+            if self.settings.get("strict", False):
                 raise ConfigError("Config file errors encountered in strict mode")
         else:
             log("")

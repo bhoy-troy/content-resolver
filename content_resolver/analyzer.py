@@ -248,10 +248,10 @@ def _get_koji_log_path(srpm_id, arch, koji_session):
             koji_pkg_data = koji_session.getRPM(f"{srpm_id}.src")
             koji_logs = koji_session.getBuildLogs(koji_pkg_data["build_id"])
             break
-        except koji.GenericError:
+        except koji.GenericError as err:
             attempts += 1
             if attempts == max_tries:
-                raise KojiRootLogError("Could not talk to Koji API")
+                raise KojiRootLogError("Could not talk to Koji API") from err
             time.sleep(1)
 
     # TODO: use `next` and comprehension for lazy evaluation next(x for x in koji_logs)
@@ -281,10 +281,10 @@ def _download_root_log_with_retry(root_log_url):
             with urllib.request.urlopen(request, timeout=20) as response:
                 root_log_data = response.read()
                 return root_log_data.decode("utf-8")
-        except Exception:
+        except Exception as err:
             attempts += 1
             if attempts == max_tries:
-                raise KojiRootLogError(f"Could not download root.log from {root_log_url}")
+                raise KojiRootLogError(f"Could not download root.log from {root_log_url}") from err
             time.sleep(1)
 
 
@@ -900,7 +900,7 @@ class Analyzer:
                     date_now = datetime.datetime.now().date()
                     self.data["repos"][repo_id]["compose_days_ago"] = (date_now - compose_date).days
 
-                except:
+                except Exception:
                     pass
 
     @staticmethod
@@ -1358,7 +1358,7 @@ class Analyzer:
                                             if repo_obj.get_id() == repo_name:
                                                 repo_obj.disable()
                                                 break
-                                    except Exception as disable_err:
+                                    except Exception:
                                         pass
                                         # log(f"  Warning: Could not disable repo {repo_name}: {disable_err}")
                                 break
