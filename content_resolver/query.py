@@ -132,7 +132,7 @@ class Query:
         return sorted(list(matching_ids))
 
     @cache
-    def workloads_id(self, id, list_all=False, output_change=None):
+    def workloads_id(self, workload_id, list_all=False, output_change=None):
         """Look up workloads using a pre-formed env or workload ID string.
 
         A convenience wrapper around :meth:`workloads` that accepts either a
@@ -140,7 +140,7 @@ class Query:
         workload ID (``"workload_conf_id:env_conf_id:repo_id:arch"``).
 
         Args:
-            id: Colon-separated env or workload ID string.
+            workload_id: Colon-separated env or workload ID string.
             list_all: Forwarded to :meth:`workloads`.
             output_change: Forwarded to :meth:`workloads`.
 
@@ -150,7 +150,7 @@ class Query:
         Raises:
             ValueError: If ``id`` does not have 3 or 4 components.
         """
-        id_components = id.split(":")
+        id_components = workload_id.split(":")
 
         # It's an env!
         if len(id_components) == 3:
@@ -236,7 +236,7 @@ class Query:
         return sorted(list(matching_ids))
 
     @cache
-    def envs_id(self, id, list_all=False, output_change=None):
+    def envs_id(self, env_id, list_all=False, output_change=None):
         """Look up environments using a pre-formed env or workload ID string.
 
         A convenience wrapper around :meth:`envs` that parses a colon-separated
@@ -244,7 +244,7 @@ class Query:
         components before delegating.
 
         Args:
-            id: Colon-separated env or workload ID string.
+            env_id: Colon-separated env or workload ID string.
             list_all: Forwarded to :meth:`envs`.
             output_change: Forwarded to :meth:`envs`.
 
@@ -254,7 +254,7 @@ class Query:
         Raises:
             ValueError: If ``id`` does not have 3 or 4 components.
         """
-        id_components = id.split(":")
+        id_components = env_id.split(":")
 
         # It's an env!
         if len(id_components) == 3:
@@ -449,13 +449,13 @@ class Query:
         return sorted(final_pkg_list, key=lambda k: k["id"])
 
     @cache
-    def workload_pkgs_id(self, id, output_change=None):
+    def workload_pkgs_id(self, pkg_id, output_change=None):
         """Return workload packages using a pre-formed env or workload ID string.
 
         Parses ``id`` and delegates to :meth:`workload_pkgs`.
 
         Args:
-            id: Colon-separated 3-component env ID or 4-component workload ID.
+            pkg_id: Colon-separated 3-component env ID or 4-component workload ID.
             output_change: Forwarded to :meth:`workload_pkgs`.
 
         Returns:
@@ -464,7 +464,7 @@ class Query:
         Raises:
             ValueError: If ``id`` does not have 3 or 4 components.
         """
-        id_components = id.split(":")
+        id_components = pkg_id.split(":")
 
         # It's an env!
         if len(id_components) == 3:
@@ -567,13 +567,13 @@ class Query:
         return final_pkg_list_sorted
 
     @cache
-    def env_pkgs_id(self, id):
+    def env_pkgs_id(self, pkg_id):
         """Return environment packages using a pre-formed env or workload ID string.
 
         Parses ``id`` and delegates to :meth:`env_pkgs`.
 
         Args:
-            id: Colon-separated 3-component env ID or 4-component workload ID.
+            pkg_id: Colon-separated 3-component env ID or 4-component workload ID.
                 When a workload ID is given only the env components are used.
 
         Returns:
@@ -582,7 +582,7 @@ class Query:
         Raises:
             ValueError: If ``id`` does not have 3 or 4 components.
         """
-        id_components = id.split(":")
+        id_components = pkg_id.split(":")
 
         # It's an env!
         if len(id_components) == 3:
@@ -635,11 +635,11 @@ class Query:
         return sum(pkg["installsize"] for pkg in pkgs)
 
     @cache
-    def workload_size_id(self, id):
+    def workload_size_id(self, workload_id):
         """Return the total workload size using a pre-formed env or workload ID string.
 
         Args:
-            id: Colon-separated 3-component env ID or 4-component workload ID.
+            workload_id: Colon-separated 3-component env ID or 4-component workload ID.
 
         Returns:
             Total installed size in bytes (``int``).
@@ -647,7 +647,7 @@ class Query:
         Raises:
             ValueError: If ``id`` does not have 3 or 4 components.
         """
-        id_components = id.split(":")
+        id_components = workload_id.split(":")
 
         # It's an env!
         if len(id_components) == 3:
@@ -667,11 +667,11 @@ class Query:
         raise ValueError("That seems to be an invalid ID!")
 
     @cache
-    def env_size_id(self, id):
+    def env_size_id(self, env_id):
         """Return the total environment size using a pre-formed env or workload ID string.
 
         Args:
-            id: Colon-separated 3-component env ID or 4-component workload ID.
+            env_id: Colon-separated 3-component env ID or 4-component workload ID.
 
         Returns:
             Total installed size in bytes (``int``).
@@ -679,7 +679,7 @@ class Query:
         Raises:
             ValueError: If ``id`` does not have 3 or 4 components.
         """
-        id_components = id.split(":")
+        id_components = env_id.split(":")
 
         # It's an env!
         if len(id_components) == 3:

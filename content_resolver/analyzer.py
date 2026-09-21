@@ -858,10 +858,10 @@ class Analyzer:
             config.get_installroot_option().set(os.path.join(self.tmp_installroots, root_name))
 
             # Architecture and Releasever
-            vars = base.get_vars()
-            vars.set("arch", arch)
-            vars.set("basearch", arch)
-            vars.set("releasever", repo["source"]["releasever"])
+            baes_vars = base.get_vars()
+            baes_vars.set("arch", arch)
+            baes_vars.set("basearch", arch)
+            baes_vars.set("releasever", repo["source"]["releasever"])
 
             config.get_ignorearch_option().set(True)
 
@@ -1254,10 +1254,10 @@ class Analyzer:
             config.get_installroot_option().set(os.path.join(self.tmp_installroots, root_name))
 
             # Architecture and Releasever
-            vars = base.get_vars()
-            vars.set("arch", arch)
-            vars.set("basearch", arch)
-            vars.set("releasever", repo["source"]["releasever"])
+            base_vars = base.get_vars()
+            base_vars.set("arch", arch)
+            base_vars.set("basearch", arch)
+            base_vars.set("releasever", repo["source"]["releasever"])
 
             config.get_ignorearch_option().set(True)
 
@@ -1563,10 +1563,10 @@ class Analyzer:
             config.get_installroot_option().set(os.path.join(self.tmp_installroots, root_name))
 
             # Architecture and Releasever
-            vars = base.get_vars()
-            vars.set("arch", arch)
-            vars.set("basearch", arch)
-            vars.set("releasever", repo["source"]["releasever"])
+            base_vars = base.get_vars()
+            base_vars.set("arch", arch)
+            base_vars.set("basearch", arch)
+            base_vars.set("releasever", repo["source"]["releasever"])
 
             config.get_ignorearch_option().set(True)
 
@@ -2975,15 +2975,15 @@ class Analyzer:
         koji_id = work_item["koji_id"]
         arch = work_item["arch"]
         srpm_id = work_item["srpm_id"]
-        deps = result["deps"]
+        srpm_deps = result["deps"]
 
         # Update cache
-        self.cache["root_log_deps"]["next"][koji_id][arch][srpm_id] = deps
+        self.cache["root_log_deps"]["next"][koji_id][arch][srpm_id] = srpm_deps
 
         # Update main data
         # Here it's important to add the packages to the already initiated
         # set, because its reference is shared between the koji_srpms and the srpm sections
-        self.data["buildroot"]["koji_srpms"][koji_id][arch][srpm_id]["directly_required_pkg_names"].update(deps)
+        self.data["buildroot"]["koji_srpms"][koji_id][arch][srpm_id]["directly_required_pkg_names"].update(srpm_deps)
 
     def _analyze_build_groups(self):
         """Resolve the base build group (``@build``) for every repo/arch combination.
@@ -3498,7 +3498,7 @@ class Analyzer:
         log("  DONE!")
         log("")
 
-    def _init_pkg_or_srpm_relations_fields(self, target_pkg, type=None):
+    def _init_pkg_or_srpm_relations_fields(self, target_pkg, pkg_type=None):
         """Add all cross-arch relation tracking fields to a package or SRPM dict.
 
         Initialises empty sets and dicts for workload memberships, buildroot
@@ -3509,7 +3509,7 @@ class Analyzer:
 
         Args:
             target_pkg (dict): The cross-arch package or SRPM dict to mutate.
-            type (str | None): Either ``"rpm"`` (binary package) or ``None``
+            pkg_type (str | None): Either ``"rpm"`` (binary package) or ``None``
                 / ``"srpm"`` (source package).  Defaults to ``None``.
         """
         # I kept them all listed so they're easy to copy
@@ -3553,7 +3553,7 @@ class Analyzer:
         target_pkg["maintainer_recommendation_details"] = {}
         target_pkg["best_maintainers"] = set()
 
-        if type == "rpm":
+        if pkg_type == "rpm":
             # Dependency of RPM NEVRs
             target_pkg["dependency_of_pkg_nevrs"] = set()
             target_pkg["hard_dependency_of_pkg_nevrs"] = set()
@@ -3566,7 +3566,7 @@ class Analyzer:
             target_pkg["weak_dependency_of_pkg_names"] = {}
             target_pkg["reverse_weak_dependency_of_pkg_names"] = {}
 
-    def _populate_pkg_or_srpm_relations_fields(self, target_pkg, source_pkg, type=None, view=None):
+    def _populate_pkg_or_srpm_relations_fields(self, target_pkg, source_pkg, pkg_type=None, view=None):
         """Merge arch-specific package relation data into the cross-arch aggregate.
 
         Called once per architecture for each package/SRPM to fold workload
@@ -3579,7 +3579,7 @@ class Analyzer:
                 :meth:`_init_pkg_or_srpm_relations_fields`.
             source_pkg (dict): Single-arch package or SRPM dict from
                 ``self.data["views"][view_id]["pkgs"]`` or ``["source_pkgs"]``.
-            type (str | None): ``"rpm"`` or ``"srpm"`` / ``None``.  When
+            pkg_type (str | None): ``"rpm"`` or ``"srpm"`` / ``None``.  When
                 ``"rpm"``, hard/weak/reverse-weak dependency fields are also
                 populated.  Defaults to ``None``.
             view (dict | None): The per-arch view dict.  Required when
@@ -3596,7 +3596,7 @@ class Analyzer:
         # It gets called for all the arches.
         #
 
-        if type == "rpm" and not view:
+        if pkg_type == "rpm" and not view:
             raise ValueError("This function requires a view when using type = 'rpm'!")
 
         # Unwanted
@@ -3656,7 +3656,7 @@ class Analyzer:
 
             level += 1
 
-        if type == "rpm":
+        if pkg_type == "rpm":
             # Hard dependency of
             for pkg_id in source_pkg["required_by"]:
                 pkg_name = pkg_id_to_name(pkg_id)
@@ -3857,7 +3857,7 @@ class Analyzer:
                             view_all_arches[key][identifier]["arches"] = set()
                             view_all_arches[key][identifier]["highest_priority_reponames_per_arch"] = {}
 
-                            self._init_pkg_or_srpm_relations_fields(view_all_arches[key][identifier], type="rpm")
+                            self._init_pkg_or_srpm_relations_fields(view_all_arches[key][identifier], pkg_type="rpm")
 
                         if package["nevr"] not in view_all_arches[key][identifier]["nevrs"]:
                             view_all_arches[key][identifier]["nevrs"][package["nevr"]] = set()
@@ -3872,7 +3872,7 @@ class Analyzer:
                         )
 
                         self._populate_pkg_or_srpm_relations_fields(
-                            view_all_arches[key][identifier], package, type="rpm", view=view
+                            view_all_arches[key][identifier], package, pkg_type="rpm", view=view
                         )
 
                         # Binary Packages by nevr
@@ -3891,7 +3891,7 @@ class Analyzer:
                             view_all_arches[key][identifier]["highest_priority_reponames_per_arch"] = {}
                             view_all_arches[key][identifier]["category"] = None
 
-                            self._init_pkg_or_srpm_relations_fields(view_all_arches[key][identifier], type="rpm")
+                            self._init_pkg_or_srpm_relations_fields(view_all_arches[key][identifier], pkg_type="rpm")
 
                         view_all_arches[key][identifier]["arches"].add(arch)
                         view_all_arches[key][identifier]["reponame_per_arch"][arch] = package["reponame"]
@@ -3904,7 +3904,7 @@ class Analyzer:
                         view_all_arches[key][identifier]["arches_arches"][arch].add(package["arch"])
 
                         self._populate_pkg_or_srpm_relations_fields(
-                            view_all_arches[key][identifier], package, type="rpm", view=view
+                            view_all_arches[key][identifier], package, pkg_type="rpm", view=view
                         )
 
                     # Source Packages
@@ -3946,7 +3946,7 @@ class Analyzer:
                         view_all_arches[key][identifier]["arches"].add(arch)
 
                         self._populate_pkg_or_srpm_relations_fields(
-                            view_all_arches[key][identifier], package, type="srpm"
+                            view_all_arches[key][identifier], package, pkg_type="srpm"
                         )
 
                     # Add binary packages to source packages
