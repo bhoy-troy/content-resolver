@@ -181,7 +181,7 @@ def _generate_env_pages(query):
             "env_id": env_id,
             "env": env,
             "env_conf": env_conf,
-            "repo": repo
+            "repo": repo,
         }
 
         page_name = f"env--{env_id}"
@@ -403,12 +403,12 @@ def _generate_view_pages(query):
 def _dump_all_data(query):
     log("Dumping all data...")
 
-    data = {}
-    data["data"] = query.data
-    data["configs"] = query.configs
-    data["settings"] = query.settings
-    data["computed_data"] = query.computed_data
-
+    data = {
+        "data": query.data,
+        "configs": query.configs,
+        "settings": query.settings,
+        "computed_data": query.computed_data,
+    }
     file_name = "data.json"
     file_path = os.path.join(query.settings["output"], file_name)
     dump_data(file_path, data)

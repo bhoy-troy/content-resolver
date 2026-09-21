@@ -40,28 +40,16 @@ class Query:
         matching_ids = set()
 
         # list considered workload_conf_ids
-        if workload_conf_id:
-            workload_conf_ids = [workload_conf_id]
-        else:
-            workload_conf_ids = self.configs["workloads"].keys()
+        workload_conf_ids = [workload_conf_id] if workload_conf_id else self.configs["workloads"].keys()
 
         # list considered env_conf_ids
-        if env_conf_id:
-            env_conf_ids = [env_conf_id]
-        else:
-            env_conf_ids = self.configs["envs"].keys()
+        env_conf_ids = [env_conf_id] if env_conf_id else self.configs["envs"].keys()
 
         # list considered repo_ids
-        if repo_id:
-            repo_ids = [repo_id]
-        else:
-            repo_ids = self.configs["repos"].keys()
+        repo_ids = [repo_id] if repo_id else self.configs["repos"].keys()
 
         # list considered arches
-        if arch:
-            arches = [arch]
-        else:
-            arches = self.settings["allowed_arches"]
+        arches = [arch] if arch else self.settings["allowed_arches"]
 
         # And now try looping through all of that, and return True on a first occurance
         # This is a terrible amount of loops. But most cases will have just one item
@@ -76,14 +64,13 @@ class Query:
                             if not list_all:
                                 return True
                             if output_change:
-                                if output_change == "workload_conf_ids":
-                                    matching_ids.add(workload_conf_id)
-                                if output_change == "env_conf_ids":
-                                    matching_ids.add(env_conf_id)
-                                if output_change == "repo_ids":
-                                    matching_ids.add(repo_id)
-                                if output_change == "arches":
-                                    matching_ids.add(arch)
+                                output_map = {
+                                    "workload_conf_ids": workload_conf_id,
+                                    "env_conf_ids": env_conf_id,
+                                    "repo_ids": repo_id,
+                                    "arches": arch,
+                                }
+                                matching_ids.add(output_map.get(output_change))
                             else:
                                 matching_ids.add(workload_id)
 
@@ -127,22 +114,13 @@ class Query:
         matching_ids = set()
 
         # list considered env_conf_ids
-        if env_conf_id:
-            env_conf_ids = [env_conf_id]
-        else:
-            env_conf_ids = self.configs["envs"].keys()
+        env_conf_ids = [env_conf_id] if env_conf_id else self.configs["envs"].keys()
 
         # list considered repo_ids
-        if repo_id:
-            repo_ids = [repo_id]
-        else:
-            repo_ids = self.configs["repos"].keys()
+        repo_ids = [repo_id] if repo_id else self.configs["repos"].keys()
 
         # list considered arches
-        if arch:
-            arches = [arch]
-        else:
-            arches = self.settings["allowed_arches"]
+        arches = [arch] if arch else self.settings["allowed_arches"]
 
         # And now try looping through all of that, and return True on a first occurance
         # This is a terrible amount of loops. But most cases will have just one item
@@ -156,12 +134,12 @@ class Query:
                         if not list_all:
                             return True
                         if output_change:
-                            if output_change == "env_conf_ids":
-                                matching_ids.add(env_conf_id)
-                            if output_change == "repo_ids":
-                                matching_ids.add(repo_id)
-                            if output_change == "arches":
-                                matching_ids.add(arch)
+                            output_map = {
+                                "env_conf_ids": env_conf_id,
+                                "repo_ids": repo_id,
+                                "arches": arch,
+                            }
+                            matching_ids.add(output_map.get(output_change))
                         else:
                             matching_ids.add(env_id)
 
@@ -242,28 +220,30 @@ class Query:
                 # Create a copy since it's gonna be modified, and include only what's needed
                 pkg = self.data["pkgs"][workload_repo_id][workload_arch][pkg_id]
                 if pkg_id not in pkgs[workload_repo_id][workload_arch]:
-                    pkgs[workload_repo_id][workload_arch][pkg_id] = {}
-                    pkgs[workload_repo_id][workload_arch][pkg_id]["id"] = pkg_id
-                    pkgs[workload_repo_id][workload_arch][pkg_id]["name"] = pkg["name"]
-                    pkgs[workload_repo_id][workload_arch][pkg_id]["evr"] = pkg["evr"]
-                    pkgs[workload_repo_id][workload_arch][pkg_id]["arch"] = pkg["arch"]
-                    pkgs[workload_repo_id][workload_arch][pkg_id]["installsize"] = pkg["installsize"]
-                    pkgs[workload_repo_id][workload_arch][pkg_id]["description"] = pkg["description"]
-                    pkgs[workload_repo_id][workload_arch][pkg_id]["summary"] = pkg["summary"]
-                    pkgs[workload_repo_id][workload_arch][pkg_id]["source_name"] = pkg["source_name"]
-                    pkgs[workload_repo_id][workload_arch][pkg_id]["q_arch"] = workload_arch
-                    pkgs[workload_repo_id][workload_arch][pkg_id]["q_in"] = set()
-                    pkgs[workload_repo_id][workload_arch][pkg_id]["q_required_in"] = set()
-                    pkgs[workload_repo_id][workload_arch][pkg_id]["q_env_in"] = set()
+                    pkgs[workload_repo_id][workload_arch][pkg_id] = {
+                        "id": pkg_id,
+                        "name": pkg["name"],
+                        "evr": pkg["evr"],
+                        "arch": pkg["arch"],
+                        "installsize": pkg["installsize"],
+                        "description": pkg["description"],
+                        "summary": pkg["summary"],
+                        "source_name": pkg["source_name"],
+                        "q_arch": workload_arch,
+                        "q_in": set(),
+                        "q_required_in": set(),
+                        "q_env_in": set(),
+                    }
 
                 # It's here, so add it
                 pkgs[workload_repo_id][workload_arch][pkg_id]["q_in"].add(workload_id)
                 # Browsing env packages, so add it
                 pkgs[workload_repo_id][workload_arch][pkg_id]["q_env_in"].add(workload_id)
                 # Is it required?
-                if pkg["name"] in self.configs["workloads"][workload_conf_id]["packages"]:
-                    pkgs[workload_repo_id][workload_arch][pkg_id]["q_required_in"].add(workload_id)
-                if pkg["name"] in self.configs["workloads"][workload_conf_id]["arch_packages"][workload_arch]:
+                if (
+                    pkg["name"] in self.configs["workloads"][workload_conf_id]["packages"]
+                    or pkg["name"] in self.configs["workloads"][workload_conf_id]["arch_packages"][workload_arch]
+                ):
                     pkgs[workload_repo_id][workload_arch][pkg_id]["q_required_in"].add(workload_id)
 
             # Second, add all the other packages
@@ -272,46 +252,49 @@ class Query:
                 # and initialize extra fields
                 pkg = self.data["pkgs"][workload_repo_id][workload_arch][pkg_id]
                 if pkg_id not in pkgs[workload_repo_id][workload_arch]:
-                    pkgs[workload_repo_id][workload_arch][pkg_id] = {}
-                    pkgs[workload_repo_id][workload_arch][pkg_id]["id"] = pkg_id
-                    pkgs[workload_repo_id][workload_arch][pkg_id]["name"] = pkg["name"]
-                    pkgs[workload_repo_id][workload_arch][pkg_id]["evr"] = pkg["evr"]
-                    pkgs[workload_repo_id][workload_arch][pkg_id]["arch"] = pkg["arch"]
-                    pkgs[workload_repo_id][workload_arch][pkg_id]["installsize"] = pkg["installsize"]
-                    pkgs[workload_repo_id][workload_arch][pkg_id]["description"] = pkg["description"]
-                    pkgs[workload_repo_id][workload_arch][pkg_id]["summary"] = pkg["summary"]
-                    pkgs[workload_repo_id][workload_arch][pkg_id]["source_name"] = pkg["source_name"]
-                    pkgs[workload_repo_id][workload_arch][pkg_id]["q_arch"] = workload_arch
-                    pkgs[workload_repo_id][workload_arch][pkg_id]["q_in"] = set()
-                    pkgs[workload_repo_id][workload_arch][pkg_id]["q_required_in"] = set()
-                    pkgs[workload_repo_id][workload_arch][pkg_id]["q_env_in"] = set()
+                    pkgs[workload_repo_id][workload_arch][pkg_id] = {
+                        "id": pkg_id,
+                        "name": pkg["name"],
+                        "evr": pkg["evr"],
+                        "arch": pkg["arch"],
+                        "installsize": pkg["installsize"],
+                        "description": pkg["description"],
+                        "summary": pkg["summary"],
+                        "source_name": pkg["source_name"],
+                        "q_arch": workload_arch,
+                        "q_in": set(),
+                        "q_required_in": set(),
+                        "q_env_in": set(),
+                    }
 
                 # It's here, so add it
                 pkgs[workload_repo_id][workload_arch][pkg_id]["q_in"].add(workload_id)
                 # Not adding it to q_env_in
                 # Is it required?
-                if pkg["name"] in self.configs["workloads"][workload_conf_id]["packages"]:
-                    pkgs[workload_repo_id][workload_arch][pkg_id]["q_required_in"].add(workload_id)
-                if pkg["name"] in self.configs["workloads"][workload_conf_id]["arch_packages"][workload_arch]:
+                if (
+                    pkg["name"] in self.configs["workloads"][workload_conf_id]["packages"]
+                    or pkg["name"] in self.configs["workloads"][workload_conf_id]["arch_packages"][workload_arch]
+                ):
                     pkgs[workload_repo_id][workload_arch][pkg_id]["q_required_in"].add(workload_id)
 
             # Third, add package placeholders if any
             for placeholder_id in workload["pkg_placeholder_ids"]:
                 placeholder = workload_conf["package_placeholders"]["pkgs"][pkg_id_to_name(placeholder_id)]
                 if placeholder_id not in pkgs[workload_repo_id][workload_arch]:
-                    pkgs[workload_repo_id][workload_arch][placeholder_id] = {}
-                    pkgs[workload_repo_id][workload_arch][placeholder_id]["id"] = placeholder_id
-                    pkgs[workload_repo_id][workload_arch][placeholder_id]["name"] = placeholder["name"]
-                    pkgs[workload_repo_id][workload_arch][placeholder_id]["evr"] = "000-placeholder"
-                    pkgs[workload_repo_id][workload_arch][placeholder_id]["arch"] = "placeholder"
-                    pkgs[workload_repo_id][workload_arch][placeholder_id]["installsize"] = 0
-                    pkgs[workload_repo_id][workload_arch][placeholder_id]["description"] = placeholder["description"]
-                    pkgs[workload_repo_id][workload_arch][placeholder_id]["summary"] = placeholder["description"]
-                    pkgs[workload_repo_id][workload_arch][placeholder_id]["source_name"] = placeholder["srpm"]
-                    pkgs[workload_repo_id][workload_arch][placeholder_id]["q_arch"] = workload_arch
-                    pkgs[workload_repo_id][workload_arch][placeholder_id]["q_in"] = set()
-                    pkgs[workload_repo_id][workload_arch][placeholder_id]["q_required_in"] = set()
-                    pkgs[workload_repo_id][workload_arch][placeholder_id]["q_env_in"] = set()
+                    pkgs[workload_repo_id][workload_arch][placeholder_id] = {
+                        "id": placeholder_id,
+                        "name": placeholder["name"],
+                        "evr": "000-placeholder",
+                        "arch": "placeholder",
+                        "installsize": 0,
+                        "description": placeholder["description"],
+                        "summary": placeholder["description"],
+                        "source_name": placeholder["srpm"],
+                        "q_arch": workload_arch,
+                        "q_in": set(),
+                        "q_required_in": set(),
+                        "q_env_in": set(),
+                    }
 
                 # It's here, so add it
                 pkgs[workload_repo_id][workload_arch][placeholder_id]["q_in"].add(workload_id)
@@ -323,18 +306,16 @@ class Query:
             pkg_names = set()
             for repo_id in repo_ids:
                 for arch in arches:
-                    for pkg_id, pkg in pkgs[repo_id][arch].items():
-                        if output_change == "ids":
-                            pkg_names.add(pkg["id"])
-                        elif output_change == "binary_names":
-                            pkg_names.add(pkg["name"])
-                        elif output_change == "source_nvr":
-                            pkg_names.add(pkg["sourcerpm"])
-                        elif output_change == "source_names":
-                            pkg_names.add(pkg["source_name"])
+                    for pkg in pkgs[repo_id][arch].values():
+                        output_map = {
+                            "ids": pkg["id"],
+                            "binary_names": pkg["name"],
+                            "source_nvr": pkg["sourcerpm"],
+                            "source_names": pkg["source_name"],
+                        }
+                        pkg_names.add(output_map.get(output_change))
 
-            names_sorted = sorted(list(pkg_names))
-            return names_sorted
+            return sorted(list(pkg_names))
 
         # And now I just need to flatten that dict and return all packages as a list
         final_pkg_list = []
@@ -344,9 +325,7 @@ class Query:
                     final_pkg_list.append(pkg)
 
         # And sort them by nevr which is their ID
-        final_pkg_list_sorted = sorted(final_pkg_list, key=lambda k: k["id"])
-
-        return final_pkg_list_sorted
+        return sorted(final_pkg_list, key=lambda k: k["id"])
 
     @lru_cache(maxsize=None)
     def workload_pkgs_id(self, id, output_change=None):
@@ -388,11 +367,7 @@ class Query:
 
         # Replicating the same structure as in data["pkgs"]
         # That is: [repo_id][arch][pkg_id]
-        pkgs = {}
-        for repo_id in repo_ids:
-            pkgs[repo_id] = {}
-            for arch in arches:
-                pkgs[repo_id][arch] = {}
+        pkgs = {repo_id: {arch: {} for arch in arches} for repo_id in repo_ids}
 
         # envs are already paired with repos, and arches
         # (there is one for each combination)
@@ -407,19 +382,20 @@ class Query:
                 # Create a copy since it's gonna be modified, and include only what's needed
                 pkg = self.data["pkgs"][env_repo_id][env_arch][pkg_id]
                 if pkg_id not in pkgs[env_repo_id][env_arch]:
-                    pkgs[env_repo_id][env_arch][pkg_id] = {}
-                    pkgs[env_repo_id][env_arch][pkg_id]["id"] = pkg_id
-                    pkgs[env_repo_id][env_arch][pkg_id]["name"] = pkg["name"]
-                    pkgs[env_repo_id][env_arch][pkg_id]["evr"] = pkg["evr"]
-                    pkgs[env_repo_id][env_arch][pkg_id]["arch"] = pkg["arch"]
-                    pkgs[env_repo_id][env_arch][pkg_id]["installsize"] = pkg["installsize"]
-                    pkgs[env_repo_id][env_arch][pkg_id]["description"] = pkg["description"]
-                    pkgs[env_repo_id][env_arch][pkg_id]["summary"] = pkg["summary"]
-                    pkgs[env_repo_id][env_arch][pkg_id]["source_name"] = pkg["source_name"]
-                    pkgs[env_repo_id][env_arch][pkg_id]["sourcerpm"] = pkg["sourcerpm"]
-                    pkgs[env_repo_id][env_arch][pkg_id]["q_arch"] = env_arch
-                    pkgs[env_repo_id][env_arch][pkg_id]["q_in"] = set()
-                    pkgs[env_repo_id][env_arch][pkg_id]["q_required_in"] = set()
+                    pkgs[env_repo_id][env_arch][pkg_id] = {
+                        "id": pkg_id,
+                        "name": pkg["name"],
+                        "evr": pkg["evr"],
+                        "arch": pkg["arch"],
+                        "installsize": pkg["installsize"],
+                        "description": pkg["description"],
+                        "summary": pkg["summary"],
+                        "source_name": pkg["source_name"],
+                        "sourcerpm": pkg["sourcerpm"],
+                        "q_arch": env_arch,
+                        "q_in": set(),
+                        "q_required_in": set(),
+                    }
 
                 # It's here, so add it
                 pkgs[env_repo_id][env_arch][pkg_id]["q_in"].add(env_id)
@@ -467,19 +443,13 @@ class Query:
     def workload_size(self, workload_conf_id, env_conf_id, repo_id, arch):
         # A total size of a workload (or multiple combined!)
         pkgs = self.workload_pkgs(workload_conf_id, env_conf_id, repo_id, arch)
-        size = 0
-        for pkg in pkgs:
-            size += pkg["installsize"]
-        return size
+        return sum(pkg["installsize"] for pkg in pkgs)
 
     @lru_cache(maxsize=None)
     def env_size(self, env_conf_id, repo_id, arch):
         # A total size of an env (or multiple combined!)
         pkgs = self.env_pkgs(env_conf_id, repo_id, arch)
-        size = 0
-        for pkg in pkgs:
-            size += pkg["installsize"]
-        return size
+        return sum(pkg["installsize"] for pkg in pkgs)
 
     @lru_cache(maxsize=None)
     def workload_size_id(self, id):
@@ -631,22 +601,23 @@ class Query:
                 # Create a copy since it's gonna be modified, and include only what's needed
                 pkg = self.data["pkgs"][repo_id][arch][pkg_id]
                 if pkg_id not in pkgs:
-                    pkgs[pkg_id] = {}
-                    pkgs[pkg_id]["id"] = pkg_id
-                    pkgs[pkg_id]["name"] = pkg["name"]
-                    pkgs[pkg_id]["evr"] = pkg["evr"]
-                    pkgs[pkg_id]["arch"] = pkg["arch"]
-                    pkgs[pkg_id]["installsize"] = pkg["installsize"]
-                    pkgs[pkg_id]["description"] = pkg["description"]
-                    pkgs[pkg_id]["summary"] = pkg["summary"]
-                    pkgs[pkg_id]["source_name"] = pkg["source_name"]
-                    pkgs[pkg_id]["sourcerpm"] = pkg["sourcerpm"]
-                    pkgs[pkg_id]["q_arch"] = arch
-                    pkgs[pkg_id]["q_in"] = set()
-                    pkgs[pkg_id]["q_required_in"] = set()
-                    pkgs[pkg_id]["q_dep_in"] = set()
-                    pkgs[pkg_id]["q_env_in"] = set()
-                    pkgs[pkg_id]["q_maintainers"] = set()
+                    pkgs[pkg_id] = {
+                        "id": pkg_id,
+                        "name": pkg["name"],
+                        "evr": pkg["evr"],
+                        "arch": pkg["arch"],
+                        "installsize": pkg["installsize"],
+                        "description": pkg["description"],
+                        "summary": pkg["summary"],
+                        "source_name": pkg["source_name"],
+                        "sourcerpm": pkg["sourcerpm"],
+                        "q_arch": arch,
+                        "q_in": set(),
+                        "q_required_in": set(),
+                        "q_dep_in": set(),
+                        "q_env_in": set(),
+                        "q_maintainers": set(),
+                    }
 
                 # It's here, so add it
                 pkgs[pkg_id]["q_in"].add(workload_id)
@@ -664,22 +635,23 @@ class Query:
                 # and initialize extra fields
                 pkg = self.data["pkgs"][repo_id][arch][pkg_id]
                 if pkg_id not in pkgs:
-                    pkgs[pkg_id] = {}
-                    pkgs[pkg_id]["id"] = pkg_id
-                    pkgs[pkg_id]["name"] = pkg["name"]
-                    pkgs[pkg_id]["evr"] = pkg["evr"]
-                    pkgs[pkg_id]["arch"] = pkg["arch"]
-                    pkgs[pkg_id]["installsize"] = pkg["installsize"]
-                    pkgs[pkg_id]["description"] = pkg["description"]
-                    pkgs[pkg_id]["summary"] = pkg["summary"]
-                    pkgs[pkg_id]["source_name"] = pkg["source_name"]
-                    pkgs[pkg_id]["sourcerpm"] = pkg["sourcerpm"]
-                    pkgs[pkg_id]["q_arch"] = arch
-                    pkgs[pkg_id]["q_in"] = set()
-                    pkgs[pkg_id]["q_required_in"] = set()
-                    pkgs[pkg_id]["q_dep_in"] = set()
-                    pkgs[pkg_id]["q_env_in"] = set()
-                    pkgs[pkg_id]["q_maintainers"] = set()
+                    pkgs[pkg_id] = {
+                        "id": pkg_id,
+                        "name": pkg["name"],
+                        "evr": pkg["evr"],
+                        "arch": pkg["arch"],
+                        "installsize": pkg["installsize"],
+                        "description": pkg["description"],
+                        "summary": pkg["summary"],
+                        "source_name": pkg["source_name"],
+                        "sourcerpm": pkg["sourcerpm"],
+                        "q_arch": arch,
+                        "q_in": set(),
+                        "q_required_in": set(),
+                        "q_dep_in": set(),
+                        "q_env_in": set(),
+                        "q_maintainers": set(),
+                    }
 
                 # It's here, so add it
                 pkgs[pkg_id]["q_in"].add(workload_id)
@@ -698,22 +670,23 @@ class Query:
             for placeholder_id in workload["pkg_placeholder_ids"]:
                 placeholder = workload_conf["package_placeholders"]["pkgs"][pkg_id_to_name(placeholder_id)]
                 if placeholder_id not in pkgs:
-                    pkgs[placeholder_id] = {}
-                    pkgs[placeholder_id]["id"] = placeholder_id
-                    pkgs[placeholder_id]["name"] = placeholder["name"]
-                    pkgs[placeholder_id]["evr"] = "000-placeholder"
-                    pkgs[placeholder_id]["arch"] = "placeholder"
-                    pkgs[placeholder_id]["installsize"] = 0
-                    pkgs[placeholder_id]["description"] = placeholder["description"]
-                    pkgs[placeholder_id]["summary"] = placeholder["description"]
-                    pkgs[placeholder_id]["source_name"] = placeholder["srpm"]
-                    pkgs[placeholder_id]["sourcerpm"] = f"{placeholder['srpm']}-000-placeholder"
-                    pkgs[placeholder_id]["q_arch"] = arch
-                    pkgs[placeholder_id]["q_in"] = set()
-                    pkgs[placeholder_id]["q_required_in"] = set()
-                    pkgs[placeholder_id]["q_dep_in"] = set()
-                    pkgs[placeholder_id]["q_env_in"] = set()
-                    pkgs[placeholder_id]["q_maintainers"] = set()
+                    pkgs[placeholder_id] = {
+                        "id": placeholder_id,
+                        "name": placeholder["name"],
+                        "evr": "000-placeholder",
+                        "arch": "placeholder",
+                        "installsize": 0,
+                        "description": placeholder["description"],
+                        "summary": placeholder["description"],
+                        "source_name": placeholder["srpm"],
+                        "sourcerpm": f"{placeholder['srpm']}-000-placeholder",
+                        "q_arch": arch,
+                        "q_in": set(),
+                        "q_required_in": set(),
+                        "q_dep_in": set(),
+                        "q_env_in": set(),
+                        "q_maintainers": set(),
+                    }
 
                 # It's here, so add it
                 pkgs[placeholder_id]["q_in"].add(workload_id)
@@ -735,21 +708,14 @@ class Query:
 
             # I always need to get all package IDs
             base_pkg_ids = self.pkgs_in_view(base_view_id, arch, output_change="ids")
-            for base_pkg_id in base_pkg_ids:
-                if base_pkg_id in pkgs:
-                    del pkgs[base_pkg_id]
+            pkgs = {k: v for k, v in pkgs.items() if k not in base_pkg_ids}
 
         # Filtering by a maintainer?
         # Filter out packages not belonging to the maintainer
         # It's filtered out at this stage to keep the context of fields like
         # "q_required_in" etc. to be the whole view
-        pkg_ids_to_delete = set()
         if maintainer:
-            for pkg_id, pkg in pkgs.items():
-                if maintainer not in pkg["q_maintainers"]:
-                    pkg_ids_to_delete.add(pkg_id)
-        for pkg_id in pkg_ids_to_delete:
-            del pkgs[pkg_id]
+            pkgs = {pkg_id: pkg for pkg_id, pkg in pkgs.items() if maintainer in pkg["q_maintainers"]}
 
         # -----
         # Step 3: Make the output to be the right format
@@ -758,32 +724,23 @@ class Query:
         # Is it supposed to only output ids?
         if output_change:
             pkg_names = set()
-            for pkg_id, pkg in pkgs.items():
-                if output_change == "ids":
-                    pkg_names.add(pkg["id"])
-                elif output_change == "nevrs":
-                    pkg_names.add(f"{pkg['name']}-{pkg['evr']}")
-                elif output_change == "binary_names":
-                    pkg_names.add(pkg["name"])
-                elif output_change == "source_nvr":
-                    pkg_names.add(pkg["sourcerpm"])
-                elif output_change == "source_names":
-                    pkg_names.add(pkg["source_name"])
+            for pkg in pkgs.values():
+                output_map = {
+                    "ids": pkg["id"],
+                    "nevrs": f"{pkg['name']}-{pkg['evr']}",
+                    "binary_names": pkg["name"],
+                    "source_nvr": pkg["sourcerpm"],
+                    "source_names": pkg["source_name"],
+                }
+                pkg_names.add(output_map.get(output_change))
 
-            names_sorted = sorted(list(pkg_names))
-            return names_sorted
+            return sorted(list(pkg_names))
 
         # And now I just need to flatten that dict and return all packages as a list
-        final_pkg_list = []
-        for pkg_id, pkg in pkgs.items():
-            final_pkg_list.append(pkg)
-
         # And sort them by nevr which is their ID
-        final_pkg_list_sorted = sorted(final_pkg_list, key=lambda k: k["id"])
+        return sorted(list(pkgs.values()), key=lambda k: k["id"])
 
-        return final_pkg_list_sorted
-
-    @lru_cache(maxsize=None)
+    @cache
     def view_buildroot_pkgs(self, view_conf_id, arch, output_change=None, maintainer=None):
         # Other outputs:
         #   - "source_names"  — a list of SRPM names
@@ -810,18 +767,20 @@ class Query:
 
         for pkg_name in base_buildroot:
             if pkg_name not in pkgs:
-                pkgs[pkg_name] = {}
-                pkgs[pkg_name]["required_by"] = set()
-                pkgs[pkg_name]["base_buildroot"] = True
-                pkgs[pkg_name]["srpm_name"] = None
+                pkgs[pkg_name] = {
+                    "required_by": set(),
+                    "base_buildroot": True,
+                    "srpm_name": None,
+                }
 
         for srpm_name, srpm_data in source_pkgs.items():
             for pkg_name in srpm_data["requires"]:
                 if pkg_name not in pkgs:
-                    pkgs[pkg_name] = {}
-                    pkgs[pkg_name]["required_by"] = set()
-                    pkgs[pkg_name]["base_buildroot"] = False
-                    pkgs[pkg_name]["srpm_name"] = None
+                    pkgs[pkg_name] = {
+                        "required_by": set(),
+                        "base_buildroot": False,
+                        "srpm_name": None,
+                    }
                 pkgs[pkg_name]["required_by"].add(srpm_name)
 
         for buildroot_pkg_relations_conf_id, buildroot_pkg_relations_conf in self.configs[
@@ -905,16 +864,14 @@ class Query:
     def _srpm_name_to_rpm_names(self, srpm_name, repo_id):
         all_pkgs_by_arch = self.data["pkgs"][repo_id]
 
-        pkg_names = set()
+        return {
+            pkg["name"]
+            for pkgs in all_pkgs_by_arch.values()
+            for pkg in pkgs.values()
+            if pkg["source_name"] == srpm_name
+        }
 
-        for arch, pkgs in all_pkgs_by_arch.items():
-            for pkg_id, pkg in pkgs.items():
-                if pkg["source_name"] == srpm_name:
-                    pkg_names.add(pkg["name"])
-
-        return pkg_names
-
-    @lru_cache(maxsize=None)
+    @cache
     def view_unwanted_pkgs(self, view_conf_id, arch, output_change=None, maintainer=None):
 
         # Other outputs:
@@ -953,10 +910,11 @@ class Query:
         if "unwanted_confirmed" in output_lists:
             if not maintainer:
                 for pkg_name in view_conf["unwanted_packages"]:
-                    pkg = {}
-                    pkg["name"] = pkg_name
-                    pkg["unwanted_in_view"] = True
-                    pkg["unwanted_list_ids"] = []
+                    pkg = {
+                        "name": pkg_name,
+                        "unwanted_in_view": True,
+                        "unwanted_list_ids": [],
+                    }
 
                     unwanted_pkg_names[pkg_name] = pkg
 
@@ -965,10 +923,11 @@ class Query:
                         if pkg_name in unwanted_pkg_names:
                             continue
 
-                        pkg = {}
-                        pkg["name"] = pkg_name
-                        pkg["unwanted_in_view"] = True
-                        pkg["unwanted_list_ids"] = []
+                        pkg = {
+                            "name": pkg_name,
+                            "unwanted_in_view": True,
+                            "unwanted_list_ids": [],
+                        }
 
                         unwanted_pkg_names[pkg_name] = pkg
 
@@ -977,10 +936,11 @@ class Query:
                         if pkg_name in unwanted_pkg_names:
                             continue
 
-                        pkg = {}
-                        pkg["name"] = pkg_name
-                        pkg["unwanted_in_view"] = True
-                        pkg["unwanted_list_ids"] = []
+                        pkg = {
+                            "name": pkg_name,
+                            "unwanted_in_view": True,
+                            "unwanted_list_ids": [],
+                        }
 
                         unwanted_pkg_names[pkg_name] = pkg
 
@@ -994,10 +954,11 @@ class Query:
                         unwanted_pkg_names[pkg_name]["unwanted_list_ids"].append(unwanted_id)
                         continue
 
-                    pkg = {}
-                    pkg["name"] = pkg_name
-                    pkg["unwanted_in_view"] = False
-                    pkg["unwanted_list_ids"] = [unwanted_id]
+                    pkg = {
+                        "name": pkg_name,
+                        "unwanted_in_view": False,
+                        "unwanted_list_ids": [unwanted_id],
+                    }
 
                     unwanted_pkg_names[pkg_name] = pkg
 
@@ -1007,10 +968,11 @@ class Query:
                             unwanted_pkg_names[pkg_name]["unwanted_list_ids"].append(unwanted_id)
                             continue
 
-                        pkg = {}
-                        pkg["name"] = pkg_name
-                        pkg["unwanted_in_view"] = True
-                        pkg["unwanted_list_ids"] = []
+                        pkg = {
+                            "name": pkg_name,
+                            "unwanted_in_view": True,
+                            "unwanted_list_ids": [],
+                        }
 
                         unwanted_pkg_names[pkg_name] = pkg
 
@@ -1020,10 +982,11 @@ class Query:
                             unwanted_pkg_names[pkg_name]["unwanted_list_ids"].append(unwanted_id)
                             continue
 
-                        pkg = {}
-                        pkg["name"] = pkg_name
-                        pkg["unwanted_in_view"] = False
-                        pkg["unwanted_list_ids"] = [unwanted_id]
+                        pkg = {
+                            "name": pkg_name,
+                            "unwanted_in_view": False,
+                            "unwanted_list_ids": [unwanted_id],
+                        }
 
                         unwanted_pkg_names[pkg_name] = pkg
 
@@ -1043,7 +1006,7 @@ class Query:
             workload_conf_id = workload["workload_conf_id"]
             workload_conf = self.configs["workloads"][workload_conf_id]
 
-            for pkg_placeholder_name, pkg_placeholder in workload_conf["package_placeholders"]["srpms"].items():
+            for _pkg_placeholder_name, pkg_placeholder in workload_conf["package_placeholders"]["srpms"].items():
                 # Placeholders can be limited to specific architectures.
                 # If that's the case, check if it's available on this arch, otherwise skip it.
                 if pkg_placeholder["limit_arches"]:

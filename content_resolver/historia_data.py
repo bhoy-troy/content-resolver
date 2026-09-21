@@ -22,12 +22,13 @@ def _save_current_historic_data(query):
     file_path = os.path.join(output_dir, filename)
 
     # What to save there
-    history_data = {}
-    history_data["date"] = str(datetime.datetime.now().strftime("%Y-%m-%d"))
-    history_data["workloads"] = {}
-    history_data["envs"] = {}
-    history_data["repos"] = {}
-    history_data["views"] = {}
+    history_data = {
+        "date": str(datetime.datetime.now().strftime("%Y-%m-%d")),
+        "workloads": {},
+        "envs": {},
+        "repos": {},
+        "views": {},
+    }
 
     # Workloads
     for workload_id in query.workloads(None, None, None, None, list_all=True):
@@ -36,9 +37,10 @@ def _save_current_historic_data(query):
         if not workload["succeeded"]:
             continue
 
-        workload_history = {}
-        workload_history["size"] = query.workload_size_id(workload_id)
-        workload_history["pkg_count"] = len(query.workload_pkgs_id(workload_id))
+        workload_history = {
+            "size": query.workload_size_id(workload_id),
+            "pkg_count": len(query.workload_pkgs_id(workload_id)),
+        }
 
         history_data["workloads"][workload_id] = workload_history
 
@@ -49,9 +51,10 @@ def _save_current_historic_data(query):
         if not env["succeeded"]:
             continue
 
-        env_history = {}
-        env_history["size"] = query.env_size_id(env_id)
-        env_history["pkg_count"] = len(query.env_pkgs_id(env_id))
+        env_history = {
+            "size": query.env_size_id(env_id),
+            "pkg_count": len(query.env_pkgs_id(env_id)),
+        }
 
         history_data["envs"][env_id] = env_history
 
@@ -60,31 +63,29 @@ def _save_current_historic_data(query):
         history_data["repos"][repo_id] = {}
 
         for arch, pkgs in query.data["pkgs"][repo_id].items():
-            repo_history = {}
-            repo_history["pkg_count"] = len(pkgs)
+            repo_history = {
+                "pkg_count": len(pkgs),
+            }
 
             history_data["repos"][repo_id][arch] = repo_history
 
     # Views (new)
-    for view_conf_id, view_conf in query.configs["views"].items():
+    for view_conf_id, _view_conf in query.configs["views"].items():
         view_all_arches = query.data["views_all_arches"][view_conf_id]
 
-        history_data["views"][view_conf_id] = {}
-
-        history_data["views"][view_conf_id]["srpm_count_env"] = view_all_arches["numbers"]["srpms"]["env"]
-        history_data["views"][view_conf_id]["srpm_count_req"] = view_all_arches["numbers"]["srpms"]["req"]
-        history_data["views"][view_conf_id]["srpm_count_dep"] = view_all_arches["numbers"]["srpms"]["dep"]
-
+        history_data["views"][view_conf_id] = {
+            "srpm_count_env": view_all_arches["numbers"]["srpms"]["env"],
+            "srpm_count_req": view_all_arches["numbers"]["srpms"]["req"],
+            "srpm_count_dep": view_all_arches["numbers"]["srpms"]["dep"],
+        }
         if view_all_arches["has_buildroot"]:
-            history_data["views"][view_conf_id]["srpm_count_build_base"] = view_all_arches["numbers"]["srpms"][
-                "build_base"
-            ]
-            history_data["views"][view_conf_id]["srpm_count_build_level_1"] = view_all_arches["numbers"]["srpms"][
-                "build_level_1"
-            ]
-            history_data["views"][view_conf_id]["srpm_count_build_level_2_plus"] = view_all_arches["numbers"]["srpms"][
-                "build_level_2_plus"
-            ]
+            history_data["views"][view_conf_id].extend(
+                {
+                    "srpm_count_build_base": view_all_arches["numbers"]["srpms"]["build_base"],
+                    "srpm_count_build_level_1": view_all_arches["numbers"]["srpms"]["build_level_1"],
+                    "srpm_count_build_level_2_plus": view_all_arches["numbers"]["srpms"]["build_level_2_plus"],
+                }
+            )
 
     # And save it
     log(f"  Saving in: {file_path}")
@@ -132,25 +133,22 @@ def _generate_chartjs_data(historic_data, query):
 
     # Data for workload pages
     for workload_id in query.workloads(None, None, None, None, list_all=True):
-        entry_data = {}
-
-        # First, get the dates as chart labels
-        entry_data["labels"] = []
-        for _, entry in historic_data.items():
-            date = entry["date"]
-            entry_data["labels"].append(date)
+        entry_data = {
+            # First, get the dates as chart labels
+            "labels": [entry["date"] for entry in historic_data.values()],
+            "datasets": [],
+        }
 
         # Second, get the actual data for everything that's needed
-        entry_data["datasets"] = []
-
         workload = query.data["workloads"][workload_id]
         workload_conf_id = workload["workload_conf_id"]
         workload_conf = query.configs["workloads"][workload_conf_id]
 
-        dataset = {}
-        dataset["data"] = []
-        dataset["label"] = workload_conf["name"]
-        dataset["fill"] = "false"
+        dataset = {
+            "data": [],
+            "label": workload_conf["name"],
+            "fill": "false",
+        }
 
         for _, entry in historic_data.items():
             try:
@@ -170,26 +168,23 @@ def _generate_chartjs_data(historic_data, query):
     # Data for workload overview pages
     for workload_conf_id in query.workloads(None, None, None, None, output_change="workload_conf_ids"):
         for repo_id in query.workloads(workload_conf_id, None, None, None, output_change="repo_ids"):
-            entry_data = {}
-
-            # First, get the dates as chart labels
-            entry_data["labels"] = []
-            for _, entry in historic_data.items():
-                date = entry["date"]
-                entry_data["labels"].append(date)
+            entry_data = {
+                # First, get the dates as chart labels
+                "labels": [entry["date"] for entry in historic_data.values()],
+                "datasets": [],
+            }
 
             # Second, get the actual data for everything that's needed
-            entry_data["datasets"] = []
-
             for workload_id in query.workloads(workload_conf_id, None, repo_id, None, list_all=True):
                 workload = query.data["workloads"][workload_id]
                 env_conf_id = workload["env_conf_id"]
                 env_conf = query.configs["envs"][env_conf_id]
 
-                dataset = {}
-                dataset["data"] = []
-                dataset["label"] = f"in {env_conf['name']} {workload['arch']}"
-                dataset["fill"] = "false"
+                dataset = {
+                    "data": [],
+                    "label": f"in {env_conf['name']} {workload['arch']}",
+                    "fill": "false",
+                }
 
                 for _, entry in historic_data.items():
                     try:
@@ -214,26 +209,23 @@ def _generate_chartjs_data(historic_data, query):
                 env_conf = query.configs["envs"][env_conf_id]
                 repo = query.configs["repos"][repo_id]
 
-                entry_data = {}
-
-                # First, get the dates as chart labels
-                entry_data["labels"] = []
-                for _, entry in historic_data.items():
-                    date = entry["date"]
-                    entry_data["labels"].append(date)
+                entry_data = {
+                    # First, get the dates as chart labels
+                    "labels": [entry["date"] for entry in historic_data.values()],
+                    "datasets": [],
+                }
 
                 # Second, get the actual data for everything that's needed
-                entry_data["datasets"] = []
-
                 for workload_id in query.workloads(workload_conf_id, env_conf_id, repo_id, None, list_all=True):
                     workload = query.data["workloads"][workload_id]
                     env_conf_id = workload["env_conf_id"]
                     env_conf = query.configs["envs"][env_conf_id]
 
-                    dataset = {}
-                    dataset["data"] = []
-                    dataset["label"] = workload["arch"]
-                    dataset["fill"] = "false"
+                    dataset = {
+                        "data": [],
+                        "label": workload["arch"],
+                        "fill": "false",
+                    }
 
                     for _, entry in historic_data.items():
                         try:
@@ -258,25 +250,22 @@ def _generate_chartjs_data(historic_data, query):
                 env_conf = query.configs["envs"][env_conf_id]
                 repo = query.configs["repos"][repo_id]
 
-                entry_data = {}
-
-                # First, get the dates as chart labels
-                entry_data["labels"] = []
-                for _, entry in historic_data.items():
-                    date = entry["date"]
-                    entry_data["labels"].append(date)
+                entry_data = {
+                    # First, get the dates as chart labels
+                    "labels": [entry["date"] for entry in historic_data.values()],
+                    "datasets": [],
+                }
 
                 # Second, get the actual data for everything that's needed
-                entry_data["datasets"] = []
-
                 for workload_id in query.workloads(workload_conf_id, None, repo_id, arch, list_all=True):
                     workload = query.data["workloads"][workload_id]
                     repo = query.configs["repos"][repo_id]
 
-                    dataset = {}
-                    dataset["data"] = []
-                    dataset["label"] = f"{repo['name']} {workload['arch']}"
-                    dataset["fill"] = "false"
+                    dataset = {
+                        "data": [],
+                        "label": f"{repo['name']} {workload['arch']}",
+                        "fill": "false",
+                    }
 
                     for _, entry in historic_data.items():
                         try:
@@ -295,25 +284,22 @@ def _generate_chartjs_data(historic_data, query):
 
     # Data for env pages
     for env_id in query.envs(None, None, None, list_all=True):
-        entry_data = {}
-
-        # First, get the dates as chart labels
-        entry_data["labels"] = []
-        for _, entry in historic_data.items():
-            date = entry["date"]
-            entry_data["labels"].append(date)
+        entry_data = {
+            # First, get the dates as chart labels
+            "labels": [entry["date"] for entry in historic_data.values()],
+            "datasets": [],
+        }
 
         # Second, get the actual data for everything that's needed
-        entry_data["datasets"] = []
-
         env = query.data["envs"][env_id]
         env_conf_id = env["env_conf_id"]
         env_conf = query.configs["envs"][env_conf_id]
 
-        dataset = {}
-        dataset["data"] = []
-        dataset["label"] = env_conf["name"]
-        dataset["fill"] = "false"
+        dataset = {
+            "data": [],
+            "label": env_conf["name"],
+            "fill": "false",
+        }
 
         for _, entry in historic_data.items():
             try:
@@ -333,26 +319,23 @@ def _generate_chartjs_data(historic_data, query):
     # Data for env overview pages
     for env_conf_id in query.envs(None, None, None, output_change="env_conf_ids"):
         for repo_id in query.envs(env_conf_id, None, None, output_change="repo_ids"):
-            entry_data = {}
-
-            # First, get the dates as chart labels
-            entry_data["labels"] = []
-            for _, entry in historic_data.items():
-                date = entry["date"]
-                entry_data["labels"].append(date)
+            entry_data = {
+                # First, get the dates as chart labels
+                "labels": [entry["date"] for entry in historic_data.values()],
+                "datasets": [],
+            }
 
             # Second, get the actual data for everything that's needed
-            entry_data["datasets"] = []
-
             for env_id in query.envs(env_conf_id, repo_id, None, list_all=True):
                 env = query.data["envs"][env_id]
                 env_conf_id = env["env_conf_id"]
                 env_conf = query.configs["envs"][env_conf_id]
 
-                dataset = {}
-                dataset["data"] = []
-                dataset["label"] = f"in {env_conf['name']} {env['arch']}"
-                dataset["fill"] = "false"
+                dataset = {
+                    "data": [],
+                    "label": f"in {env_conf['name']} {env['arch']}",
+                    "fill": "false",
+                }
 
                 for _, entry in historic_data.items():
                     try:
@@ -376,24 +359,20 @@ def _generate_chartjs_data(historic_data, query):
             env_conf = query.configs["envs"][env_conf_id]
             repo = query.configs["repos"][repo_id]
 
-            entry_data = {}
-
-            # First, get the dates as chart labels
-            entry_data["labels"] = []
-            for _, entry in historic_data.items():
-                date = entry["date"]
-                entry_data["labels"].append(date)
-
-            # Second, get the actual data for everything that's needed
-            entry_data["datasets"] = []
+            entry_data = {
+                # First, get the dates as chart labels
+                "labels": [entry["date"] for entry in historic_data.values()],
+                "datasets": [],
+            }
 
             for env_id in query.envs(env_conf_id, repo_id, None, list_all=True):
                 env = query.data["envs"][env_id]
 
-                dataset = {}
-                dataset["data"] = []
-                dataset["label"] = env["arch"]
-                dataset["fill"] = "false"
+                dataset = {
+                    "data": [],
+                    "label": env["arch"],
+                    "fill": "false",
+                }
 
                 for _, entry in historic_data.items():
                     try:
@@ -414,11 +393,10 @@ def _generate_chartjs_data(historic_data, query):
     for view_conf_id in query.configs["views"].keys():
         view_all_arches = query.data["views_all_arches"][view_conf_id]
 
-        entry_data = {}
-
-        # First, get the dates as chart labels
-        entry_data["labels"] = []
-
+        entry_data = {
+            # First, get the dates as chart labels
+            "labels": [],
+        }
         for _, entry in historic_data.items():
             date = entry["date"]
             entry_data["labels"].append(date)
@@ -460,10 +438,11 @@ def _generate_chartjs_data(historic_data, query):
         for dataset_name in dataset_names:
             dataset_key = f"srpm_count_{dataset_name}"
 
-            dataset = {}
-            dataset["data"] = []
-            dataset["label"] = dataset_metadata[dataset_name]["name"]
-            dataset["backgroundColor"] = dataset_metadata[dataset_name]["color"]
+            dataset = {
+                "data": [],
+                "label": dataset_metadata[dataset_name]["name"],
+                "backgroundColor": dataset_metadata[dataset_name]["color"],
+            }
 
             loop_index = 0
             for _, entry in historic_data.items():

@@ -89,8 +89,9 @@ class ConfigManager:
         raise NotImplementedError("Repo v1 is not supported. Please migrate to repo v2.")
 
     def _load_config_repo_v2(self, document_id, document, settings):
-        config = {}
-        config["id"] = document_id
+        config = {
+            "id": document_id,
+        }
 
         # Step 1: Mandatory fields
         try:
@@ -137,9 +138,10 @@ class ConfigManager:
             koji_api_url = repo_data.get("koji_api_url", None)
             koji_files_url = repo_data.get("koji_files_url", None)
 
-            config["source"]["repos"][id] = {}
-            config["source"]["repos"][id]["id"] = id
-            config["source"]["repos"][id]["name"] = name
+            config["source"]["repos"][id] = {
+                "id": id,
+                "name": name,
+            }
             try:
                 config["source"]["repos"][id]["baseurl"] = repo_data["baseurl"]
             except KeyError as err:
@@ -162,8 +164,9 @@ class ConfigManager:
         return config
 
     def _load_config_env(self, document_id, document, settings):
-        config = {}
-        config["id"] = document_id
+        config = {
+            "id": document_id,
+        }
 
         # Step 1: Mandatory fields
         try:
@@ -236,8 +239,9 @@ class ConfigManager:
         return config
 
     def _load_config_workload(self, document_id, document, settings):
-        config = {}
-        config["id"] = document_id
+        config = {
+            "id": document_id,
+        }
 
         # Step 1: Mandatory fields
         try:
@@ -335,9 +339,10 @@ class ConfigManager:
 
         # Package placeholders
         # Add packages to the workload that don't exist (yet) in the repositories.
-        config["package_placeholders"] = {}
-        config["package_placeholders"]["pkgs"] = {}
-        config["package_placeholders"]["srpms"] = {}
+        config["package_placeholders"] = {
+            "pkgs": {},
+            "srpms": {},
+        }
         if "package_placeholders" in document["data"]:
             if isinstance(document["data"]["package_placeholders"], list):
                 for srpm in document["data"]["package_placeholders"]:
@@ -351,11 +356,11 @@ class ConfigManager:
 
                     all_rpm_arches = set()
 
-                    config["package_placeholders"]["srpms"][srpm_name] = {}
-                    config["package_placeholders"]["srpms"][srpm_name]["name"] = srpm_name
-                    config["package_placeholders"]["srpms"][srpm_name]["buildrequires"] = build_dependencies
-                    config["package_placeholders"]["srpms"][srpm_name]["limit_arches"] = limit_arches
-
+                    config["package_placeholders"]["srpms"][srpm_name] = {
+                        "name": srpm_name,
+                        "buildrequires": build_dependencies,
+                        "limit_arches": limit_arches,
+                    }
                     for rpm in rpms:
                         rpm_name = rpm.get("rpm_name", None)
                         if not rpm_name:
@@ -373,12 +378,13 @@ class ConfigManager:
 
                         all_rpm_arches.update(rpm_limit_arches)
 
-                        config["package_placeholders"]["pkgs"][rpm_name] = {}
-                        config["package_placeholders"]["pkgs"][rpm_name]["name"] = rpm_name
-                        config["package_placeholders"]["pkgs"][rpm_name]["description"] = description
-                        config["package_placeholders"]["pkgs"][rpm_name]["requires"] = dependencies
-                        config["package_placeholders"]["pkgs"][rpm_name]["limit_arches"] = rpm_limit_arches
-                        config["package_placeholders"]["pkgs"][rpm_name]["srpm"] = srpm_name
+                        config["package_placeholders"]["pkgs"][rpm_name] = {
+                            "name": rpm_name,
+                            "description": description,
+                            "requires": dependencies,
+                            "limit_arches": rpm_limit_arches,
+                            "srpm": srpm_name,
+                        }
 
                     if not limit_arches and all_rpm_arches:
                         config["package_placeholders"]["srpms"][srpm_name]["limit_arches"] = list(all_rpm_arches)
@@ -412,9 +418,10 @@ class ConfigManager:
         return config
 
     def _load_config_compose_view(self, document_id, document, settings):
-        config = {}
-        config["id"] = document_id
-        config["type"] = "compose"
+        config = {
+            "id": document_id,
+            "type": "compose",
+        }
 
         # Step 1: Mandatory fields
         try:
@@ -487,9 +494,10 @@ class ConfigManager:
         return config
 
     def _load_config_addon_view(self, document_id, document, settings):
-        config = {}
-        config["id"] = document_id
-        config["type"] = "addon"
+        config = {
+            "id": document_id,
+            "type": "addon",
+        }
 
         # Step 1: Mandatory fields
         try:
@@ -549,8 +557,9 @@ class ConfigManager:
         return config
 
     def _load_config_unwanted(self, document_id, document, settings):
-        config = {}
-        config["id"] = document_id
+        config = {
+            "id": document_id,
+        }
 
         # Step 1: Mandatory fields
         try:
@@ -633,8 +642,9 @@ class ConfigManager:
         return config
 
     def _load_config_buildroot(self, document_id, document, settings):
-        config = {}
-        config["id"] = document_id
+        config = {
+            "id": document_id,
+        }
 
         # Step 1: Mandatory fields
         try:
@@ -693,8 +703,9 @@ class ConfigManager:
         return config
 
     def _load_json_data_buildroot_pkg_relations(self, document_id, document, settings):
-        config = {}
-        config["id"] = document_id
+        config = {
+            "id": document_id,
+        }
 
         try:
             # View ID
@@ -825,16 +836,16 @@ class ConfigManager:
             err_log("System error: no allowed_arches not configured")
             raise SettingsError
 
-        configs = {}
-
-        configs["repos"] = {}
-        configs["envs"] = {}
-        configs["workloads"] = {}
-        configs["labels"] = {}
-        configs["views"] = {}
-        configs["unwanteds"] = {}
-        configs["buildroots"] = {}
-        configs["buildroot_pkg_relations"] = {}
+        configs = {
+            "repos": {},
+            "envs": {},
+            "workloads": {},
+            "labels": {},
+            "views": {},
+            "unwanteds": {},
+            "buildroots": {},
+            "buildroot_pkg_relations": {},
+        }
 
         # Step 1: Load all configs
         serious_error_messages = set()

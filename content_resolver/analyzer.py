@@ -442,11 +442,12 @@ class Analyzer:
         self.configs = configs
         self.settings = settings
         self.data = {}
-        self.cache = {}
-
-        self.cache["root_log_deps"] = {}
-        self.cache["root_log_deps"]["current"] = {}
-        self.cache["root_log_deps"]["next"] = {}
+        self.cache = {
+            "root_log_deps": {
+                "current": {},
+                "next": {},
+            }
+        }
 
         # Cache for compose metadata (composeinfo.json)
         # Maps repo_id -> {arch -> [list of available variant names]}
@@ -1011,19 +1012,17 @@ class Analyzer:
         queue_result.put(env)
 
     def _analyze_env(self, env_conf, repo, arch):
-        env = {}
-
-        env["env_conf_id"] = env_conf["id"]
-        env["pkg_ids"] = []
-        env["repo_id"] = repo["id"]
-        env["arch"] = arch
-
-        env["pkg_relations"] = []
-
-        env["errors"] = {}
-        env["errors"]["non_existing_pkgs"] = []
-
-        env["succeeded"] = True
+        env = {
+            "env_conf_id": env_conf["id"],
+            "pkg_ids": [],
+            "repo_id": repo["id"],
+            "arch": arch,
+            "pkg_relations": [],
+            "errors": {
+                "non_existing_pkgs": [],
+                "succeeded": True,
+            },
+        }
 
         # TODO: migrate away from context manager
         with dnf5_base() as base:
@@ -1593,7 +1592,7 @@ class Analyzer:
                 #   "package Z from RepoB requires Y = v2, but none of the providers can be installed"
                 # These indicate different repos wanting different versions of same dependency
                 lines = error_message.split("\n")
-                requires_lines = [l for l in lines if "requires" in l.lower() and "from" in l.lower()]
+                requires_lines = [line for line in lines if "requires" in line.lower() and "from" in line.lower()]
                 has_multi_version_conflict = len(requires_lines) >= 2
 
                 # Pattern 3: "conflicting requests" or "cannot install the best candidate"
@@ -1940,24 +1939,23 @@ class Analyzer:
         else:
             pkg = dict(input_pkg)
 
-        pkg["view_arch"] = arch
-
-        pkg["placeholder"] = placeholder
-
-        pkg["in_workload_ids_all"] = set()
-        pkg["in_workload_ids_req"] = set()
-        pkg["in_workload_ids_dep"] = set()
-        pkg["in_workload_ids_env"] = set()
-
-        pkg["in_buildroot_of_srpm_id_all"] = set()
-        pkg["in_buildroot_of_srpm_id_req"] = set()
-        pkg["in_buildroot_of_srpm_id_dep"] = set()
-        pkg["in_buildroot_of_srpm_id_env"] = set()
-
-        pkg["unwanted_completely_in_list_ids"] = set()
-        pkg["unwanted_buildroot_in_list_ids"] = set()
-
-        pkg["level"] = []
+        pkg.update(
+            {
+                "view_arch": arch,
+                "placeholder": placeholder,
+                "in_workload_ids_all": set(),
+                "in_workload_ids_req": set(),
+                "in_workload_ids_dep": set(),
+                "in_workload_ids_env": set(),
+                "in_buildroot_of_srpm_id_all": set(),
+                "in_buildroot_of_srpm_id_req": set(),
+                "in_buildroot_of_srpm_id_dep": set(),
+                "in_buildroot_of_srpm_id_env": set(),
+                "unwanted_completely_in_list_ids": set(),
+                "unwanted_buildroot_in_list_ids": set(),
+                "level": [],
+            }
+        )
 
         # Level 0 is runtime
         pkg["level"].append(
@@ -1992,29 +1990,25 @@ class Analyzer:
 
         srpm_id = pkg["sourcerpm"].rsplit(".src.rpm")[0]
 
-        srpm = {}
-        srpm["id"] = srpm_id
-        srpm["name"] = pkg["source_name"]
-        srpm["reponame"] = pkg["reponame"]
-        srpm["pkg_ids"] = set()
-
-        srpm["placeholder"] = False
-        srpm["placeholder_directly_required_pkg_names"] = []
-
-        srpm["in_workload_ids_all"] = set()
-        srpm["in_workload_ids_req"] = set()
-        srpm["in_workload_ids_dep"] = set()
-        srpm["in_workload_ids_env"] = set()
-
-        srpm["in_buildroot_of_srpm_id_all"] = set()
-        srpm["in_buildroot_of_srpm_id_req"] = set()
-        srpm["in_buildroot_of_srpm_id_dep"] = set()
-        srpm["in_buildroot_of_srpm_id_env"] = set()
-
-        srpm["unwanted_completely_in_list_ids"] = set()
-        srpm["unwanted_buildroot_in_list_ids"] = set()
-
-        srpm["level"] = []
+        srpm = {
+            "id": srpm_id,
+            "name": pkg["source_name"],
+            "reponame": pkg["reponame"],
+            "pkg_ids": set(),
+            "placeholder": False,
+            "placeholder_directly_required_pkg_names": [],
+            "in_workload_ids_all": set(),
+            "in_workload_ids_req": set(),
+            "in_workload_ids_dep": set(),
+            "in_workload_ids_env": set(),
+            "in_buildroot_of_srpm_id_all": set(),
+            "in_buildroot_of_srpm_id_req": set(),
+            "in_buildroot_of_srpm_id_dep": set(),
+            "in_buildroot_of_srpm_id_env": set(),
+            "unwanted_completely_in_list_ids": set(),
+            "unwanted_buildroot_in_list_ids": set(),
+            "level": [],
+        }
 
         # Level 0 is runtime
         srpm["level"].append(
@@ -2049,15 +2043,14 @@ class Analyzer:
         repo_id = view_conf["repository"]
 
         # Setting up the data buckets for this view
-        view = {}
-
-        view["id"] = view_id
-        view["view_conf_id"] = view_conf_id
-        view["arch"] = arch
-
-        view["workload_ids"] = []
-        view["pkgs"] = {}
-        view["source_pkgs"] = {}
+        view = {
+            "id": view_id,
+            "view_conf_id": view_conf_id,
+            "arch": arch,
+            "workload_ids": [],
+            "pkgs": {},
+            "source_pkgs": {},
+        }
 
         # Workloads
         for workload_id, workload in self.data["workloads"].items():
@@ -3115,7 +3108,7 @@ class Analyzer:
             # If I could do 'if level in target_pkg["level"]' I'd do that instead...
             # But it's a list, so have to do this instead
             if len(target_pkg["level"]) == level:
-                target_pkg["level"].append(dict())
+                target_pkg["level"].append({})
 
             for level_scope, those_ids in level_data.items():
                 # 'level_scope' is "all" or "req" etc.
