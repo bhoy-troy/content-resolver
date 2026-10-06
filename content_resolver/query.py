@@ -1440,8 +1440,7 @@ class Query:
                 buildrequires = pkg_placeholder["buildrequires"]
 
                 if srpm_name not in placeholder_srpms:
-                    placeholder_srpms[srpm_name] = {}
-                    placeholder_srpms[srpm_name]["build_requires"] = set()
+                    placeholder_srpms[srpm_name] = {"build_requires": set()}
 
                 placeholder_srpms[srpm_name]["build_requires"].update(buildrequires)
 
@@ -1493,9 +1492,10 @@ class Query:
             maintainer = workload_conf["maintainer"]
 
             if maintainer not in maintainers:
-                maintainers[maintainer] = {}
-                maintainers[maintainer]["name"] = maintainer
-                maintainers[maintainer]["all_succeeded"] = True
+                maintainers[maintainer] = {
+                    "name": maintainer,
+                    "all_succeeded": True,
+                }
 
             if not workload["succeeded"]:
                 maintainers[maintainer]["all_succeeded"] = False
@@ -1507,9 +1507,10 @@ class Query:
             maintainer = env_conf["maintainer"]
 
             if maintainer not in maintainers:
-                maintainers[maintainer] = {}
-                maintainers[maintainer]["name"] = maintainer
-                maintainers[maintainer]["all_succeeded"] = True
+                maintainers[maintainer] = {
+                    "name": maintainer,
+                    "all_succeeded": True,
+                }
 
             if not env["succeeded"]:
                 maintainers[maintainer]["all_succeeded"] = False

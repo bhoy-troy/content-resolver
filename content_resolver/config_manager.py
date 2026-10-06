@@ -198,19 +198,21 @@ class ConfigManager:
             koji_api_url = repo_data.get("koji_api_url", None)
             koji_files_url = repo_data.get("koji_files_url", None)
 
+            try:
+                baseurl = repo_data["baseurl"]
+            except KeyError as err:
+                raise ConfigError(f"'{document_id}.yaml' - is invalid. Repo {id} doesn't list baseurl.") from err
+
             config["source"]["repos"][id] = {
                 "id": id,
                 "name": name,
+                "baseurl": baseurl,
+                "priority": priority,
+                "exclude": exclude,
+                "limit_arches": limit_arches,
+                "koji_api_url": koji_api_url,
+                "koji_files_url": koji_files_url,
             }
-            try:
-                config["source"]["repos"][id]["baseurl"] = repo_data["baseurl"]
-            except KeyError as err:
-                raise ConfigError(f"'{document_id}.yaml' - is invalid. Repo {id} doesn't list baseurl.") from err
-            config["source"]["repos"][id]["priority"] = priority
-            config["source"]["repos"][id]["exclude"] = exclude
-            config["source"]["repos"][id]["limit_arches"] = limit_arches
-            config["source"]["repos"][id]["koji_api_url"] = koji_api_url
-            config["source"]["repos"][id]["koji_files_url"] = koji_files_url
 
         # Step 2: Optional fields
 
@@ -1143,7 +1145,7 @@ class ConfigManager:
 
                     if document["document"] in ["content-resolver-repository", "feedback-pipeline-repository"]:
                         if document["version"] == 1:
-                            configs["repos"][document_id] = self._load_config_repo(document_id, document, self.settings)
+                            configs["repos"][document_id] = self._load_config_repo(document_id, document)
 
                         elif document["version"] == 2:
                             configs["repos"][document_id] = self._load_config_repo_v2(

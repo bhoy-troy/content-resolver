@@ -3,7 +3,6 @@ import datetime
 import json
 import multiprocessing
 import os
-import sys
 import tempfile
 import time
 import traceback
@@ -1021,11 +1020,12 @@ class Analyzer:
             self.data["pkgs"][repo_id] = {
                 arch: self._analyze_pkgs(repo, arch) for arch in repo["source"]["architectures"]
             }
-            self.data["repos"][repo_id] = {}
+            self.data["repos"][repo_id] = {
+                "compose_date": None,
+                "compose_days_ago": 0,
+            }
 
             # Reading the optional composeinfo
-            self.data["repos"][repo_id]["compose_date"] = None
-            self.data["repos"][repo_id]["compose_days_ago"] = 0
             if repo["source"]["composeinfo"]:
                 # At this point, this is all I can do. Hate me or not, it gets us
                 # what we need and won't break anything in case things go badly.
@@ -1800,7 +1800,7 @@ class Analyzer:
             try:
                 # DNF5: resolve via goal
                 transaction = goal.resolve()
-            except (DnfErr, RuntimeError, Exception) as err:
+            except (DnfErr, RuntimeError) as err:
                 workload["succeeded"] = False
                 # Enhanced error message for dependency failures
                 error_message = str(err)
@@ -1980,10 +1980,7 @@ class Analyzer:
             }
             queue_result.put(workload)
             # Log error to stderr so it appears in logs
-            err_log(
-                f" ERROR analyzing workload {workload_conf['id']}:{env_conf['id']}:{repo['id']}:{arch}-> {e}",
-                file=sys.stderr,
-            )
+            err_log(f" ERROR analyzing workload {workload_conf['id']}:{env_conf['id']}:{repo['id']}:{arch}-> {e}")
 
     async def _analyze_workloads_subset_async(self, task_queue, results):
         """Process a list of workload tasks sequentially within one async coroutine.
@@ -2201,16 +2198,6 @@ class Analyzer:
                     if label in env_conf["labels"]:
                         # And save those.
                         workload_env_map[workload_conf_id].add(env_conf_id)
-
-        # And now, look at all workload configs...
-        for workload_conf_id in self.configs["workloads"].keys():
-            # ... and for each, look at all env configs it should be analyzed in.
-            for env_conf_id in workload_env_map[workload_conf_id]:
-                # Each of those envs can have multiple repos associated...
-                env_conf = self.configs["envs"][env_conf_id]
-                for repo_id in env_conf["repositories"]:
-                    # ... and each repo probably has multiple architecture.
-                    repo = self.configs["repos"][repo_id]
 
         # And now, look at all workload configs...
         for workload_conf_id, workload_conf in self.configs["workloads"].items():
@@ -2706,20 +2693,20 @@ class Analyzer:
                         # SRPMs
                         self.data["buildroot"]["koji_srpms"][koji_id] = {}
                         # URLs
-                        self.data["buildroot"]["koji_urls"][koji_id] = {}
-                        self.data["buildroot"]["koji_urls"][koji_id]["api"] = koji_api_url
-                        self.data["buildroot"]["koji_urls"][koji_id]["files"] = koji_files_url
+                        self.data["buildroot"]["koji_urls"][koji_id] = {
+                            "api": koji_api_url,
+                            "files": koji_files_url,
+                        }
 
                     if arch not in self.data["buildroot"]["koji_srpms"][koji_id]:
                         self.data["buildroot"]["koji_srpms"][koji_id][arch] = {}
 
                     # Initialise srpms in the koji_srpms section
                     if srpm_id not in self.data["buildroot"]["koji_srpms"][koji_id][arch]:
-                        self.data["buildroot"]["koji_srpms"][koji_id][arch][srpm_id] = {}
-                        self.data["buildroot"]["koji_srpms"][koji_id][arch][srpm_id]["id"] = srpm_id
-                        self.data["buildroot"]["koji_srpms"][koji_id][arch][srpm_id]["directly_required_pkg_names"] = (
-                            directly_required_pkg_names
-                        )
+                        self.data["buildroot"]["koji_srpms"][koji_id][arch][srpm_id] = {
+                            "id": srpm_id,
+                            "directly_required_pkg_names": directly_required_pkg_names,
+                        }
                     else:
                         directly_required_pkg_names = self.data["buildroot"]["koji_srpms"][koji_id][arch][srpm_id][
                             "directly_required_pkg_names"
@@ -2727,20 +2714,20 @@ class Analyzer:
 
             # Initialise srpms in the srpms section
             if srpm_id not in self.data["buildroot"]["srpms"][repo_id][arch]:
-                self.data["buildroot"]["srpms"][repo_id][arch][srpm_id] = {}
-                self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["id"] = srpm_id
-                self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["directly_required_pkg_names"] = (
-                    directly_required_pkg_names
-                )
-                self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["pkg_relations"] = {}
-                self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["pkg_env_ids"] = set()
-                self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["pkg_added_ids"] = set()
-                self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["errors"] = {}
-                self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["errors"]["non_existing_pkgs"] = set()
-                self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["errors"]["message"] = ""
-                self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["succeeded"] = False
-                self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["queued"] = False
-                self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["processed"] = False
+                self.data["buildroot"]["srpms"][repo_id][arch][srpm_id] = {
+                    "id": srpm_id,
+                    "directly_required_pkg_names": directly_required_pkg_names,
+                    "pkg_relations": {},
+                    "pkg_env_ids": set(),
+                    "pkg_added_ids": set(),
+                    "errors": {
+                        "non_existing_pkgs": set(),
+                        "message": "",
+                    },
+                    "succeeded": False,
+                    "queued": False,
+                    "processed": False,
+                }
 
         log("  DONE!")
         log("")
@@ -3017,17 +3004,19 @@ class Analyzer:
 
                 # Using the _analyze_env function!
                 # So I need to reconstruct a fake env_conf
-                fake_env_conf = {}
-                fake_env_conf["id"] = generated_id
-                fake_env_conf["options"] = []
                 if self.configs["repos"][repo_id]["source"]["base_buildroot_override"]:
-                    fake_env_conf["packages"] = self.configs["repos"][repo_id]["source"]["base_buildroot_override"]
-                    fake_env_conf["groups"] = []
+                    _packages = self.configs["repos"][repo_id]["source"]["base_buildroot_override"]
+                    _groups = []
                 else:
-                    fake_env_conf["packages"] = []
-                    fake_env_conf["groups"] = ["build"]
-                fake_env_conf["arch_packages"] = {}
-                fake_env_conf["arch_packages"][arch] = []
+                    _packages = []
+                    _groups = ["build"]
+                fake_env_conf = {
+                    "id": generated_id,
+                    "options": [],
+                    "packages": _packages,
+                    "groups": _groups,
+                    "arch_packages": {arch: []},
+                }
 
                 log(f"Resolving build group: {repo_id} {arch}")
                 repo = self.configs["repos"][repo_id]
@@ -3092,31 +3081,30 @@ class Analyzer:
 
                         # Initialise the srpm in the koji_srpms section
                         if srpm_id not in self.data["buildroot"]["koji_srpms"][koji_id][arch]:
-                            self.data["buildroot"]["koji_srpms"][koji_id][arch][srpm_id] = {}
-                            self.data["buildroot"]["koji_srpms"][koji_id][arch][srpm_id]["id"] = srpm_id
-                            self.data["buildroot"]["koji_srpms"][koji_id][arch][srpm_id][
-                                "directly_required_pkg_names"
-                            ] = directly_required_pkg_names
+                            self.data["buildroot"]["koji_srpms"][koji_id][arch][srpm_id] = {
+                                "id": srpm_id,
+                                "directly_required_pkg_names": directly_required_pkg_names,
+                            }
                         else:
                             directly_required_pkg_names = self.data["buildroot"]["koji_srpms"][koji_id][arch][srpm_id][
                                 "directly_required_pkg_names"
                             ]
 
                         # Initialise the srpm in the srpms section
-                        self.data["buildroot"]["srpms"][repo_id][arch][srpm_id] = {}
-                        self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["id"] = srpm_id
-                        self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["directly_required_pkg_names"] = (
-                            directly_required_pkg_names
-                        )
-                        self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["pkg_relations"] = {}
-                        self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["pkg_env_ids"] = set()
-                        self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["pkg_added_ids"] = set()
-                        self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["errors"] = {}
-                        self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["errors"]["non_existing_pkgs"] = set()
-                        self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["errors"]["message"] = ""
-                        self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["succeeded"] = False
-                        self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["queued"] = False
-                        self.data["buildroot"]["srpms"][repo_id][arch][srpm_id]["processed"] = False
+                        self.data["buildroot"]["srpms"][repo_id][arch][srpm_id] = {
+                            "id": srpm_id,
+                            "directly_required_pkg_names": directly_required_pkg_names,
+                            "pkg_relations": {},
+                            "pkg_env_ids": set(),
+                            "pkg_added_ids": set(),
+                            "errors": {
+                                "non_existing_pkgs": set(),
+                                "message": "",
+                            },
+                            "succeeded": False,
+                            "queued": False,
+                            "processed": False,
+                        }
 
         log(f"  Found {counter} new SRPMs!")
         log("  DONE!")
@@ -3148,16 +3136,6 @@ class Analyzer:
         self._reset_workload_processing_queue()
         fake_workload_results = {}
 
-        # Prepare a counter for the log
-        total_srpms_to_resolve = 0
-        for repo_id in self.data["buildroot"]["srpms"]:
-            for arch in self.data["buildroot"]["srpms"][repo_id]:
-                for srpm in self.data["buildroot"]["srpms"][repo_id][arch].values():
-                    if srpm["processed"]:
-                        continue
-                    total_srpms_to_resolve += 1
-        srpms_to_resolve_counter = 0
-
         for repo_id in self.data["buildroot"]["srpms"]:
             for arch in self.data["buildroot"]["srpms"][repo_id]:
                 for srpm_id, srpm in self.data["buildroot"]["srpms"][repo_id][arch].items():
@@ -3166,26 +3144,23 @@ class Analyzer:
 
                     # Using the _analyze_workload function!
                     # So I need to reconstruct a fake workload_conf and a fake env_conf
-                    fake_workload_conf = {}
-                    fake_workload_conf["labels"] = []
-                    fake_workload_conf["id"] = srpm_id
-                    fake_workload_conf["options"] = []
-                    fake_workload_conf["packages"] = srpm["directly_required_pkg_names"]
-                    fake_workload_conf["groups"] = []
-                    fake_workload_conf["package_placeholders"] = {}
-                    fake_workload_conf["package_placeholders"]["pkgs"] = {}
-                    fake_workload_conf["package_placeholders"]["srpms"] = {}
-                    fake_workload_conf["arch_packages"] = {}
-                    fake_workload_conf["arch_packages"][arch] = []
+                    fake_workload_conf = {
+                        "labels": [],
+                        "id": srpm_id,
+                        "options": [],
+                        "packages": srpm["directly_required_pkg_names"],
+                        "groups": [],
+                        "package_placeholders": {"pkgs": {}, "srpms": {}},
+                        "arch_packages": {arch: []},
+                    }
 
-                    fake_env_conf = {}
-                    fake_env_conf["labels"] = []
-                    fake_env_conf["id"] = self.data["buildroot"]["build_groups"][repo_id][arch]["generated_id"]
-                    fake_env_conf["packages"] = ["bash"]  # This just needs to pass the "if len(packages)" test as True
-                    fake_env_conf["arch_packages"] = {}
-                    fake_env_conf["arch_packages"][arch] = []
+                    fake_env_conf = {
+                        "labels": [],
+                        "id": self.data["buildroot"]["build_groups"][repo_id][arch]["generated_id"],
+                        "packages": ["bash"],  # This just needs to pass the "if len(packages)" test as True
+                        "arch_packages": {arch: []},
+                    }
 
-                    srpms_to_resolve_counter += 1
                     repo = self.configs["repos"][repo_id]
                     self._queue_workload_processing(fake_workload_conf, fake_env_conf, repo, arch)
 
@@ -3249,11 +3224,12 @@ class Analyzer:
 
         self._record_metric("started _analyze_buildroot()")
 
-        self.data["buildroot"] = {}
-        self.data["buildroot"]["koji_srpms"] = {}
-        self.data["buildroot"]["koji_urls"] = {}
-        self.data["buildroot"]["srpms"] = {}
-        self.data["buildroot"]["build_groups"] = {}
+        self.data["buildroot"] = {
+            "koji_srpms": {},
+            "koji_urls": {},
+            "srpms": {},
+            "build_groups": {},
+        }
 
         # Currently, only "compose" view types are supported.
         # The "addon" type is not.
@@ -3513,59 +3489,56 @@ class Analyzer:
             pkg_type (str | None): Either ``"rpm"`` (binary package) or ``None``
                 / ``"srpm"`` (source package).  Defaults to ``None``.
         """
-        # I kept them all listed so they're easy to copy
-
-        # Workload IDs
-        target_pkg["in_workload_ids_all"] = set()
-        target_pkg["in_workload_ids_req"] = set()
-        target_pkg["in_workload_ids_dep"] = set()
-        target_pkg["in_workload_ids_env"] = set()
-
-        # Workload Conf IDs
-        target_pkg["in_workload_conf_ids_all"] = set()
-        target_pkg["in_workload_conf_ids_req"] = set()
-        target_pkg["in_workload_conf_ids_dep"] = set()
-        target_pkg["in_workload_conf_ids_env"] = set()
-
-        # Buildroot SRPM IDs
-        target_pkg["in_buildroot_of_srpm_id_all"] = set()
-        target_pkg["in_buildroot_of_srpm_id_req"] = set()
-        target_pkg["in_buildroot_of_srpm_id_dep"] = set()
-        target_pkg["in_buildroot_of_srpm_id_env"] = set()
-
-        # Buildroot SRPM Names
-        target_pkg["in_buildroot_of_srpm_name_all"] = {}  # of set() of srpm_ids
-        target_pkg["in_buildroot_of_srpm_name_req"] = {}  # of set() of srpm_ids
-        target_pkg["in_buildroot_of_srpm_name_dep"] = {}  # of set() of srpm_ids
-        target_pkg["in_buildroot_of_srpm_name_env"] = {}  # of set() of srpm_ids
-
-        # Unwanted
-        target_pkg["unwanted_completely_in_list_ids"] = set()
-        target_pkg["unwanted_buildroot_in_list_ids"] = set()
-
-        # Level number
-        target_pkg["level_number"] = 999
-
-        # Levels
-        target_pkg["level"] = []
-
-        # Maintainer recommendation
-        target_pkg["maintainer_recommendation"] = {}
-        target_pkg["maintainer_recommendation_details"] = {}
-        target_pkg["best_maintainers"] = set()
+        target_pkg.update(
+            {
+                # Workload IDs
+                "in_workload_ids_all": set(),
+                "in_workload_ids_req": set(),
+                "in_workload_ids_dep": set(),
+                "in_workload_ids_env": set(),
+                # Workload Conf IDs
+                "in_workload_conf_ids_all": set(),
+                "in_workload_conf_ids_req": set(),
+                "in_workload_conf_ids_dep": set(),
+                "in_workload_conf_ids_env": set(),
+                # Buildroot SRPM IDs
+                "in_buildroot_of_srpm_id_all": set(),
+                "in_buildroot_of_srpm_id_req": set(),
+                "in_buildroot_of_srpm_id_dep": set(),
+                "in_buildroot_of_srpm_id_env": set(),
+                # Buildroot SRPM Names (each value is a set() of srpm_ids)
+                "in_buildroot_of_srpm_name_all": {},
+                "in_buildroot_of_srpm_name_req": {},
+                "in_buildroot_of_srpm_name_dep": {},
+                "in_buildroot_of_srpm_name_env": {},
+                # Unwanted
+                "unwanted_completely_in_list_ids": set(),
+                "unwanted_buildroot_in_list_ids": set(),
+                # Level
+                "level_number": 999,
+                "level": [],
+                # Maintainer recommendation
+                "maintainer_recommendation": {},
+                "maintainer_recommendation_details": {},
+                "best_maintainers": set(),
+            }
+        )
 
         if pkg_type == "rpm":
-            # Dependency of RPM NEVRs
-            target_pkg["dependency_of_pkg_nevrs"] = set()
-            target_pkg["hard_dependency_of_pkg_nevrs"] = set()
-            target_pkg["weak_dependency_of_pkg_nevrs"] = set()
-            target_pkg["reverse_weak_dependency_of_pkg_nevrs"] = set()
-
-            # Dependency of RPM Names
-            target_pkg["dependency_of_pkg_names"] = {}
-            target_pkg["hard_dependency_of_pkg_names"] = {}
-            target_pkg["weak_dependency_of_pkg_names"] = {}
-            target_pkg["reverse_weak_dependency_of_pkg_names"] = {}
+            target_pkg.update(
+                {
+                    # Dependency of RPM NEVRs
+                    "dependency_of_pkg_nevrs": set(),
+                    "hard_dependency_of_pkg_nevrs": set(),
+                    "weak_dependency_of_pkg_nevrs": set(),
+                    "reverse_weak_dependency_of_pkg_nevrs": set(),
+                    # Dependency of RPM Names (each value is a set() of NEVRs)
+                    "dependency_of_pkg_names": {},
+                    "hard_dependency_of_pkg_names": {},
+                    "weak_dependency_of_pkg_names": {},
+                    "reverse_weak_dependency_of_pkg_names": {},
+                }
+            )
 
     def _populate_pkg_or_srpm_relations_fields(self, target_pkg, source_pkg, pkg_type=None, view=None):
         """Merge arch-specific package relation data into the cross-arch aggregate.
@@ -3774,46 +3747,39 @@ class Analyzer:
             if True:
                 repo_id = view_conf["repository"]
 
-                view_all_arches = {}
-
-                view_all_arches["id"] = view_conf_id
-                view_all_arches["has_buildroot"] = False
-
-                if view_conf["type"] == "compose":
-                    if view_conf["buildroot_strategy"] == "root_logs":
-                        view_all_arches["has_buildroot"] = True
-                else:
-                    view_all_arches["has_buildroot"] = False
-
-                view_all_arches["everything_succeeded"] = True
-                view_all_arches["no_warnings"] = True
-
-                view_all_arches["workloads"] = {}
-
-                view_all_arches["pkgs_by_name"] = {}
-                view_all_arches["pkgs_by_nevr"] = {}
-
-                view_all_arches["source_pkgs_by_name"] = {}
-
-                view_all_arches["numbers"] = {}
-                view_all_arches["numbers"]["pkgs"] = {}
-                view_all_arches["numbers"]["pkgs"]["runtime"] = 0
-                view_all_arches["numbers"]["pkgs"]["env"] = 0
-                view_all_arches["numbers"]["pkgs"]["req"] = 0
-                view_all_arches["numbers"]["pkgs"]["dep"] = 0
-                view_all_arches["numbers"]["pkgs"]["build"] = 0
-                view_all_arches["numbers"]["pkgs"]["build_base"] = 0
-                view_all_arches["numbers"]["pkgs"]["build_level_1"] = 0
-                view_all_arches["numbers"]["pkgs"]["build_level_2_plus"] = 0
-                view_all_arches["numbers"]["srpms"] = {}
-                view_all_arches["numbers"]["srpms"]["runtime"] = 0
-                view_all_arches["numbers"]["srpms"]["env"] = 0
-                view_all_arches["numbers"]["srpms"]["req"] = 0
-                view_all_arches["numbers"]["srpms"]["dep"] = 0
-                view_all_arches["numbers"]["srpms"]["build"] = 0
-                view_all_arches["numbers"]["srpms"]["build_base"] = 0
-                view_all_arches["numbers"]["srpms"]["build_level_1"] = 0
-                view_all_arches["numbers"]["srpms"]["build_level_2_plus"] = 0
+                has_buildroot = view_conf["type"] == "compose" and view_conf["buildroot_strategy"] == "root_logs"
+                view_all_arches = {
+                    "id": view_conf_id,
+                    "has_buildroot": has_buildroot,
+                    "everything_succeeded": True,
+                    "no_warnings": True,
+                    "workloads": {},
+                    "pkgs_by_name": {},
+                    "pkgs_by_nevr": {},
+                    "source_pkgs_by_name": {},
+                    "numbers": {
+                        "pkgs": {
+                            "runtime": 0,
+                            "env": 0,
+                            "req": 0,
+                            "dep": 0,
+                            "build": 0,
+                            "build_base": 0,
+                            "build_level_1": 0,
+                            "build_level_2_plus": 0,
+                        },
+                        "srpms": {
+                            "runtime": 0,
+                            "env": 0,
+                            "req": 0,
+                            "dep": 0,
+                            "build": 0,
+                            "build_base": 0,
+                            "build_level_1": 0,
+                            "build_level_2_plus": 0,
+                        },
+                    },
+                }
 
                 for arch in view_conf["architectures"]:
                     view_id = f"{view_conf_id}:{arch}"
@@ -3826,13 +3792,13 @@ class Analyzer:
                         workload_conf = self.configs["workloads"][workload_conf_id]
 
                         if workload_conf_id not in view_all_arches["workloads"]:
-                            view_all_arches["workloads"][workload_conf_id] = {}
-                            view_all_arches["workloads"][workload_conf_id]["workload_conf_id"] = workload_conf_id
-                            view_all_arches["workloads"][workload_conf_id]["name"] = workload_conf["name"]
-                            view_all_arches["workloads"][workload_conf_id]["maintainer"] = workload_conf["maintainer"]
-                            view_all_arches["workloads"][workload_conf_id]["succeeded"] = True
-                            view_all_arches["workloads"][workload_conf_id]["no_warnings"] = True
-                            # ...
+                            view_all_arches["workloads"][workload_conf_id] = {
+                                "workload_conf_id": workload_conf_id,
+                                "name": workload_conf["name"],
+                                "maintainer": workload_conf["maintainer"],
+                                "succeeded": True,
+                                "no_warnings": True,
+                            }
 
                         if not workload["succeeded"]:
                             view_all_arches["workloads"][workload_conf_id]["succeeded"] = False
@@ -3850,13 +3816,14 @@ class Analyzer:
 
                         # Init
                         if identifier not in view_all_arches[key]:
-                            view_all_arches[key][identifier] = {}
-                            view_all_arches[key][identifier]["name"] = package["name"]
-                            view_all_arches[key][identifier]["placeholder"] = package["placeholder"]
-                            view_all_arches[key][identifier]["source_name"] = package["source_name"]
-                            view_all_arches[key][identifier]["nevrs"] = {}
-                            view_all_arches[key][identifier]["arches"] = set()
-                            view_all_arches[key][identifier]["highest_priority_reponames_per_arch"] = {}
+                            view_all_arches[key][identifier] = {
+                                "name": package["name"],
+                                "placeholder": package["placeholder"],
+                                "source_name": package["source_name"],
+                                "nevrs": {},
+                                "arches": set(),
+                                "highest_priority_reponames_per_arch": {},
+                            }
 
                             self._init_pkg_or_srpm_relations_fields(view_all_arches[key][identifier], pkg_type="rpm")
 
@@ -3881,16 +3848,17 @@ class Analyzer:
                         identifier = package["nevr"]
 
                         if identifier not in view_all_arches[key]:
-                            view_all_arches[key][identifier] = {}
-                            view_all_arches[key][identifier]["name"] = package["name"]
-                            view_all_arches[key][identifier]["placeholder"] = package["placeholder"]
-                            view_all_arches[key][identifier]["evr"] = package["evr"]
-                            view_all_arches[key][identifier]["source_name"] = package["source_name"]
-                            view_all_arches[key][identifier]["arches"] = set()
-                            view_all_arches[key][identifier]["arches_arches"] = {}
-                            view_all_arches[key][identifier]["reponame_per_arch"] = {}
-                            view_all_arches[key][identifier]["highest_priority_reponames_per_arch"] = {}
-                            view_all_arches[key][identifier]["category"] = None
+                            view_all_arches[key][identifier] = {
+                                "name": package["name"],
+                                "placeholder": package["placeholder"],
+                                "evr": package["evr"],
+                                "source_name": package["source_name"],
+                                "arches": set(),
+                                "arches_arches": {},
+                                "reponame_per_arch": {},
+                                "highest_priority_reponames_per_arch": {},
+                                "category": None,
+                            }
 
                             self._init_pkg_or_srpm_relations_fields(view_all_arches[key][identifier], pkg_type="rpm")
 
@@ -3915,18 +3883,19 @@ class Analyzer:
                         identifier = package["name"]
 
                         if identifier not in view_all_arches[key]:
-                            view_all_arches[key][identifier] = {}
-                            view_all_arches[key][identifier]["name"] = package["name"]
-                            view_all_arches[key][identifier]["placeholder"] = package["placeholder"]
+                            view_all_arches[key][identifier] = {
+                                "name": package["name"],
+                                "placeholder": package["placeholder"],
+                                "errors": {},
+                                "warnings": {},
+                                "pkg_names": set(),
+                                "pkg_nevrs": set(),
+                                "arches": set(),
+                                "category": None,
+                            }
                             if view_all_arches["has_buildroot"]:
                                 view_all_arches[key][identifier]["buildroot_succeeded"] = True
                                 view_all_arches[key][identifier]["buildroot_no_warnings"] = True
-                            view_all_arches[key][identifier]["errors"] = {}
-                            view_all_arches[key][identifier]["warnings"] = {}
-                            view_all_arches[key][identifier]["pkg_names"] = set()
-                            view_all_arches[key][identifier]["pkg_nevrs"] = set()
-                            view_all_arches[key][identifier]["arches"] = set()
-                            view_all_arches[key][identifier]["category"] = None
 
                             self._init_pkg_or_srpm_relations_fields(view_all_arches[key][identifier])
 
@@ -4293,12 +4262,12 @@ class Analyzer:
                             the_highest_sublevel_of_this_buildroot_srpm = min(
                                 all_the_previous_sublevels_of_this_buildroot_srpm
                             )
-                            the_score_I_care_about = (prev_level, the_highest_sublevel_of_this_buildroot_srpm)
+                            the_score_i_care_about = (prev_level, the_highest_sublevel_of_this_buildroot_srpm)
 
                             for buildroot_srpm_maintainer, buildroot_srpm_maintainer_scores in buildroot_srpm[
                                 "maintainer_recommendation"
                             ].items():
-                                if the_score_I_care_about in buildroot_srpm_maintainer_scores:
+                                if the_score_i_care_about in buildroot_srpm_maintainer_scores:
                                     level_change_detection_tuple = (buildroot_srpm_name, pkg_name)
                                     if level_change_detection_tuple not in level_change_detection:
                                         level_changes_made = True
@@ -4522,9 +4491,7 @@ class Analyzer:
                                 ][loop_level][loop_sublevel][maintainer]["locations"].update(locations)
 
                 # And set stuff for the next level
-                prev_level = level
                 level = str(int(level) + 1)
-                # level += 1
                 sublevel = str(0)
                 score = (level, sublevel)
                 previous_level_srpms.update(this_level_srpms)

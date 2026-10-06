@@ -468,6 +468,12 @@ def _generate_view_pages(query):
         _generate_html_page("view_errors", template_data, page_name, query.settings)
 
         # Generate the arch lists
+        # FIXME: Is this codeblock required? currently no use.
+        # Compare with the blocks above it -- each one sets page_name and template_data then
+        # invokes _generate_html_page(...).
+        # This loop sets them up but never makes the call.
+        # It's either dead code or a bug (the _generate_html_page call was accidentally deleted or never added).
+        # Worth checking if there should be arch-specific view pages being generated -- if not, it's safe to remove.
         for arch in view_conf["architectures"]:
             view_id = f"{view_conf_id}:{arch}"
 
