@@ -307,9 +307,9 @@ class Query:
         Raises:
             ValueError: If ``output_change`` is not a recognised value.
         """
-        if output_change:
-            if output_change not in ["ids", "binary_names", "source_nvr", "source_names"]:
-                raise ValueError('output_change must be one of: "ids", "binary_names", "source_nvr", "source_names"')
+        invalid_change_names = ["ids", "binary_names", "source_nvr", "source_names"]
+        if output_change and output_change not in invalid_change_names:
+            raise ValueError('output_change must be one of: "ids", "binary_names", "source_nvr", "source_names"')
 
         # Step 1: get all the matching workloads!
         workload_ids = self.workloads(workload_conf_id, env_conf_id, repo_id, arch, list_all=True)
@@ -872,11 +872,11 @@ class Query:
         Raises:
             ValueError: If ``output_change`` is not a recognised value.
         """
-        if output_change:
-            if output_change not in ["ids", "nevrs", "binary_names", "source_nvr", "source_names"]:
-                raise ValueError(
-                    'output_change must be one of: "ids", "nevrs", "binary_names", "source_nvr", "source_names"'
-                )
+        invalid_change_names = ["ids", "nevrs", "binary_names", "source_nvr", "source_names"]
+        if output_change and output_change not in invalid_change_names:
+            raise ValueError(
+                'output_change must be one of: "ids", "nevrs", "binary_names", "source_nvr", "source_names"'
+            )
 
         # -----
         # Step 1: get all packages from all workloads in this view
@@ -1062,9 +1062,8 @@ class Query:
         Raises:
             ValueError: If ``output_change`` is not ``"source_names"``.
         """
-        if output_change:
-            if output_change not in ["source_names"]:
-                raise ValueError('output_change must be one of: "source_names"')
+        if output_change and output_change not in ["source_names"]:
+            raise ValueError('output_change must be one of: "source_names"')
 
         pkgs = {}
 
@@ -1113,9 +1112,12 @@ class Query:
             for this_pkg_id in buildroot_pkg_relations:
                 this_pkg_name = pkg_id_to_name(this_pkg_id)
 
-                if this_pkg_name in pkgs:
-                    if this_pkg_id in buildroot_pkg_relations and not pkgs[this_pkg_name]["srpm_name"]:
-                        pkgs[this_pkg_name]["srpm_name"] = buildroot_pkg_relations[this_pkg_id]["source_name"]
+                if (
+                    this_pkg_name in pkgs
+                    and this_pkg_id in buildroot_pkg_relations
+                    and not pkgs[this_pkg_name]["srpm_name"]
+                ):
+                    pkgs[this_pkg_name]["srpm_name"] = buildroot_pkg_relations[this_pkg_id]["source_name"]
 
         if output_change == "source_names":
             srpms = set()
@@ -1311,9 +1313,21 @@ class Query:
             arches = [arch]
 
         ### Step 1: Get packages from this view's config (unwanted confirmed)
-        if "unwanted_confirmed" in output_lists:
-            if not maintainer:
-                for pkg_name in view_conf["unwanted_packages"]:
+        if "unwanted_confirmed" in output_lists and not maintainer:
+            for pkg_name in view_conf["unwanted_packages"]:
+                pkg = {
+                    "name": pkg_name,
+                    "unwanted_in_view": True,
+                    "unwanted_list_ids": [],
+                }
+
+                unwanted_pkg_names[pkg_name] = pkg
+
+            for arch in arches:
+                for pkg_name in view_conf["unwanted_arch_packages"][arch]:
+                    if pkg_name in unwanted_pkg_names:
+                        continue
+
                     pkg = {
                         "name": pkg_name,
                         "unwanted_in_view": True,
@@ -1322,31 +1336,18 @@ class Query:
 
                     unwanted_pkg_names[pkg_name] = pkg
 
-                for arch in arches:
-                    for pkg_name in view_conf["unwanted_arch_packages"][arch]:
-                        if pkg_name in unwanted_pkg_names:
-                            continue
+            for pkg_source_name in view_conf["unwanted_source_packages"]:
+                for pkg_name in self._srpm_name_to_rpm_names(pkg_source_name, repo_id):
+                    if pkg_name in unwanted_pkg_names:
+                        continue
 
-                        pkg = {
-                            "name": pkg_name,
-                            "unwanted_in_view": True,
-                            "unwanted_list_ids": [],
-                        }
+                    pkg = {
+                        "name": pkg_name,
+                        "unwanted_in_view": True,
+                        "unwanted_list_ids": [],
+                    }
 
-                        unwanted_pkg_names[pkg_name] = pkg
-
-                for pkg_source_name in view_conf["unwanted_source_packages"]:
-                    for pkg_name in self._srpm_name_to_rpm_names(pkg_source_name, repo_id):
-                        if pkg_name in unwanted_pkg_names:
-                            continue
-
-                        pkg = {
-                            "name": pkg_name,
-                            "unwanted_in_view": True,
-                            "unwanted_list_ids": [],
-                        }
-
-                        unwanted_pkg_names[pkg_name] = pkg
+                    unwanted_pkg_names[pkg_name] = pkg
 
         ### Step 2: Get packages from the various exclusion lists (unwanted proposal)
         if "unwanted_proposals" in output_lists:
@@ -1431,9 +1432,8 @@ class Query:
             for _pkg_placeholder_name, pkg_placeholder in workload_conf["package_placeholders"]["srpms"].items():
                 # Placeholders can be limited to specific architectures.
                 # If that's the case, check if it's available on this arch, otherwise skip it.
-                if pkg_placeholder["limit_arches"]:
-                    if arch not in pkg_placeholder["limit_arches"]:
-                        continue
+                if pkg_placeholder["limit_arches"] and arch not in pkg_placeholder["limit_arches"]:
+                    continue
 
                 srpm_name = pkg_placeholder["name"]
 

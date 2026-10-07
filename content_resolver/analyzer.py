@@ -306,10 +306,9 @@ def _get_koji_log_path(srpm_id, arch, koji_session):
     # TODO: use `next` and comprehension for lazy evaluation next(x for x in koji_logs)
     koji_log_path = None
     for koji_log in koji_logs:
-        if koji_log["name"] == "root.log":
-            if koji_log["dir"] == arch or koji_log["dir"] == "noarch":
-                koji_log_path = koji_log["path"]
-                break
+        if koji_log["name"] == "root.log" and (koji_log["dir"] == arch or koji_log["dir"] == "noarch"):
+            koji_log_path = koji_log["path"]
+            break
 
     return koji_log_path
 
@@ -3243,10 +3242,9 @@ class Analyzer:
         for view_conf_id in self.configs["views"]:
             view_conf = self.configs["views"][view_conf_id]
 
-            if view_conf["type"] == "compose":
-                if view_conf["buildroot_strategy"] == "root_logs":
-                    for arch in view_conf["architectures"]:
-                        self._populate_buildroot_with_view_srpms(view_conf, arch)
+            if view_conf["type"] == "compose" and view_conf["buildroot_strategy"] == "root_logs":
+                for arch in view_conf["architectures"]:
+                    self._populate_buildroot_with_view_srpms(view_conf, arch)
 
         # Time to resolve the build groups!
         # This initialises and populates:
@@ -3464,10 +3462,9 @@ class Analyzer:
         for view_conf_id in self.configs["views"]:
             view_conf = self.configs["views"][view_conf_id]
 
-            if view_conf["type"] == "compose":
-                if view_conf["buildroot_strategy"] == "root_logs":
-                    for arch in view_conf["architectures"]:
-                        self._add_buildroot_to_view(view_conf, arch)
+            if view_conf["type"] == "compose" and view_conf["buildroot_strategy"] == "root_logs":
+                for arch in view_conf["architectures"]:
+                    self._add_buildroot_to_view(view_conf, arch)
 
         # And the addon is not supported now
 
@@ -3600,9 +3597,8 @@ class Analyzer:
         # Level number
         level_number = 0
         for level in source_pkg["level"]:
-            if level["all"]:
-                if level_number < target_pkg["level_number"]:
-                    target_pkg["level_number"] = level_number
+            if level["all"] and level_number < target_pkg["level_number"]:
+                target_pkg["level_number"] = level_number
             level_number += 1
 
         # All the levels!
@@ -4082,13 +4078,12 @@ class Analyzer:
         for view_conf_id in self.configs["views"]:
             view_conf = self.configs["views"][view_conf_id]
 
-            if view_conf["type"] == "compose":
-                if view_conf["buildroot_strategy"] == "root_logs":
-                    for arch in view_conf["architectures"]:
-                        view_id = f"{view_conf_id}:{arch}"
-                        view = self.data["views"][view_id]
+            if view_conf["type"] == "compose" and view_conf["buildroot_strategy"] == "root_logs":
+                for arch in view_conf["architectures"]:
+                    view_id = f"{view_conf_id}:{arch}"
+                    view = self.data["views"][view_id]
 
-                        self._add_unwanted_packages_to_view(view, view_conf)
+                    self._add_unwanted_packages_to_view(view, view_conf)
 
     def _recommend_maintainers(self):
         """Compute maintainer recommendations for every source package in all views.
