@@ -442,8 +442,7 @@ class Query:
         final_pkg_list = []
         for repo_id in repo_ids:
             for arch in arches:
-                for pkg_id, pkg in pkgs[repo_id][arch].items():
-                    final_pkg_list.append(pkg)
+                final_pkg_list.extend(list(pkgs[repo_id][arch].values()))
 
         # And sort them by nevr which is their ID
         return sorted(final_pkg_list, key=lambda k: k["id"])
@@ -558,8 +557,7 @@ class Query:
         final_pkg_list = []
         for repo_id in repo_ids:
             for arch in arches:
-                for pkg_id, pkg in pkgs[repo_id][arch].items():
-                    final_pkg_list.append(pkg)
+                final_pkg_list.extend(list(pkgs[repo_id][arch].values()))
 
         # And sort them by nevr which is their ID
         final_pkg_list_sorted = sorted(final_pkg_list, key=lambda k: k["id"])

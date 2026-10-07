@@ -692,8 +692,7 @@ class Analyzer:
         repo_id = repo["id"]
 
         # Check cache first
-        if repo_id not in self.compose_metadata_cache:
-            self.compose_metadata_cache[repo_id] = {}
+        self.compose_metadata_cache.setdefault(repo_id, {})
 
         if arch in self.compose_metadata_cache[repo_id]:
             return self.compose_metadata_cache[repo_id][arch]
@@ -2142,11 +2141,7 @@ class Analyzer:
         """
         repo_id = repo["id"]
 
-        if repo_id not in self.workload_queue:
-            self.workload_queue[repo_id] = {}
-
-        if arch not in self.workload_queue[repo_id]:
-            self.workload_queue[repo_id][arch] = []
+        self.workload_queue.setdefault(repo_id, {}).setdefault(arch, [])
 
         workload_task = {
             "workload_conf": workload_conf,
@@ -2664,11 +2659,7 @@ class Analyzer:
         repo_id = view_conf["repository"]
 
         # Initialise the srpms section
-        if repo_id not in self.data["buildroot"]["srpms"]:
-            self.data["buildroot"]["srpms"][repo_id] = {}
-
-        if arch not in self.data["buildroot"]["srpms"][repo_id]:
-            self.data["buildroot"]["srpms"][repo_id][arch] = {}
+        self.data["buildroot"]["srpms"].setdefault(repo_id, {}).setdefault(arch, {})
 
         # Initialise each srpm
         for srpm_id, srpm in view["source_pkgs"].items():
@@ -2697,8 +2688,7 @@ class Analyzer:
                             "files": koji_files_url,
                         }
 
-                    if arch not in self.data["buildroot"]["koji_srpms"][koji_id]:
-                        self.data["buildroot"]["koji_srpms"][koji_id][arch] = {}
+                    self.data["buildroot"]["koji_srpms"][koji_id].setdefault(arch, {})
 
                     # Initialise srpms in the koji_srpms section
                     if srpm_id not in self.data["buildroot"]["koji_srpms"][koji_id][arch]:
@@ -2759,17 +2749,13 @@ class Analyzer:
             koji_urls = self.data["buildroot"]["koji_urls"][koji_id]
 
             # If the cache is empty, initialise it
-            if koji_id not in self.cache["root_log_deps"]["current"]:
-                self.cache["root_log_deps"]["current"][koji_id] = {}
-            if koji_id not in self.cache["root_log_deps"]["next"]:
-                self.cache["root_log_deps"]["next"][koji_id] = {}
+            self.cache["root_log_deps"]["current"].setdefault(koji_id, {})
+            self.cache["root_log_deps"]["next"].setdefault(koji_id, {})
 
             for arch in self.data["buildroot"]["koji_srpms"][koji_id]:
                 # If the cache is empty, initialise it
-                if arch not in self.cache["root_log_deps"]["current"][koji_id]:
-                    self.cache["root_log_deps"]["current"][koji_id][arch] = {}
-                if arch not in self.cache["root_log_deps"]["next"][koji_id]:
-                    self.cache["root_log_deps"]["next"][koji_id][arch] = {}
+                self.cache["root_log_deps"]["current"][koji_id].setdefault(arch, {})
+                self.cache["root_log_deps"]["next"][koji_id].setdefault(arch, {})
 
                 for srpm_id, srpm in self.data["buildroot"]["koji_srpms"][koji_id][arch].items():
                     total_srpms_to_resolve += 1
@@ -3588,11 +3574,7 @@ class Analyzer:
 
             for srpm_id in source_pkg[f"in_buildroot_of_srpm_id_{list_type}"]:
                 srpm_name = pkg_id_to_name(srpm_id)
-
-                if srpm_name not in target_pkg[f"in_buildroot_of_srpm_name_{list_type}"]:
-                    target_pkg[f"in_buildroot_of_srpm_name_{list_type}"][srpm_name] = set()
-
-                target_pkg[f"in_buildroot_of_srpm_name_{list_type}"][srpm_name].add(srpm_id)
+                target_pkg[f"in_buildroot_of_srpm_name_{list_type}"].setdefault(srpm_name, set()).add(srpm_id)
 
         # Level number
         level_number = 0
@@ -3619,8 +3601,7 @@ class Analyzer:
                 # 'level_scope' is "all" or "req" etc.
                 # 'those_ids' is a list of srpm_ids or workload_ids
 
-                if level_scope not in target_pkg["level"][level]:
-                    target_pkg["level"][level][level_scope] = set()
+                target_pkg["level"][level].setdefault(level_scope, set())
 
                 target_pkg["level"][level][level_scope].update(those_ids)
 
@@ -3654,10 +3635,7 @@ class Analyzer:
                 pkg = view["pkgs"][pkg_id]
                 pkg_nevr = f"{pkg['name']}-{pkg['evr']}"
                 target_pkg["hard_dependency_of_pkg_nevrs"].add(pkg_nevr)
-
-                if pkg_name not in target_pkg["hard_dependency_of_pkg_names"]:
-                    target_pkg["hard_dependency_of_pkg_names"][pkg_name] = set()
-                target_pkg["hard_dependency_of_pkg_names"][pkg_name].add(pkg_nevr)
+                target_pkg["hard_dependency_of_pkg_names"].setdefault(pkg_name, set()).add(pkg_nevr)
 
             # Weak dependency of
             for list_type in ["recommended", "suggested"]:
@@ -3675,10 +3653,7 @@ class Analyzer:
                     pkg = view["pkgs"][pkg_id]
                     pkg_nevr = f"{pkg['name']}-{pkg['evr']}"
                     target_pkg["weak_dependency_of_pkg_nevrs"].add(pkg_nevr)
-
-                    if pkg_name not in target_pkg["weak_dependency_of_pkg_names"]:
-                        target_pkg["weak_dependency_of_pkg_names"][pkg_name] = set()
-                    target_pkg["weak_dependency_of_pkg_names"][pkg_name].add(pkg_nevr)
+                    target_pkg["weak_dependency_of_pkg_names"].setdefault(pkg_name, set()).add(pkg_nevr)
 
             # Reverse weak dependency of (supplements)
             for pkg_id in source_pkg["supplements"]:
@@ -3696,9 +3671,7 @@ class Analyzer:
                 pkg_nevr = f"{pkg['name']}-{pkg['evr']}"
                 target_pkg["reverse_weak_dependency_of_pkg_nevrs"].add(pkg_nevr)
 
-                if pkg_name not in target_pkg["reverse_weak_dependency_of_pkg_names"]:
-                    target_pkg["reverse_weak_dependency_of_pkg_names"][pkg_name] = set()
-                target_pkg["reverse_weak_dependency_of_pkg_names"][pkg_name].add(pkg_nevr)
+                target_pkg["reverse_weak_dependency_of_pkg_names"].setdefault(pkg_name, set()).add(pkg_nevr)
 
             # All types of dependency
             target_pkg["dependency_of_pkg_nevrs"].update(target_pkg["hard_dependency_of_pkg_nevrs"])
@@ -4026,21 +3999,15 @@ class Analyzer:
 
             # Pkgs
             for pkg_name in unwanted_conf["unwanted_packages"]:
-                if pkg_name not in pkgs_unwanted_completely:
-                    pkgs_unwanted_completely[pkg_name] = set()
-                pkgs_unwanted_completely[pkg_name].add(unwanted_conf_id)
+                pkgs_unwanted_completely.setdefault(pkg_name, set()).add(unwanted_conf_id)
 
             # Arch Pkgs
             for pkg_name in unwanted_conf["unwanted_arch_packages"][arch]:
-                if pkg_name not in pkgs_unwanted_completely:
-                    pkgs_unwanted_completely[pkg_name] = set()
-                pkgs_unwanted_completely[pkg_name].add(unwanted_conf_id)
+                pkgs_unwanted_completely.setdefault(pkg_name, set()).add(unwanted_conf_id)
 
             # SRPMs
             for pkg_source_name in unwanted_conf["unwanted_source_packages"]:
-                if pkg_source_name not in srpms_unwanted_completely:
-                    srpms_unwanted_completely[pkg_source_name] = set()
-                srpms_unwanted_completely[pkg_source_name].add(unwanted_conf_id)
+                srpms_unwanted_completely.setdefault(pkg_source_name, set()).add(unwanted_conf_id)
 
         # Add it to the packages
         for pkg_id, pkg in view["pkgs"].items():
