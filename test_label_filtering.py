@@ -78,7 +78,7 @@ def test_filter_multiple_labels(all_configs):
     assert len(filtered_configs['workloads']) > 0 or len(filtered_configs['views']) > 0
 
     # Verify specific expected results
-    assert len(filtered_configs['workloads']) == 7
+    assert len(filtered_configs['workloads']) == 8
     assert len(filtered_configs['envs']) == 2
     assert len(filtered_configs['views']) == 3
 
@@ -147,5 +147,5 @@ def test_filter_with_whitespace_in_labels():
 
     # Should work the same as without whitespace
     assert filtered_configs is not None
-    assert len(filtered_configs['workloads']) == 7
+    assert len(filtered_configs['workloads']) == 8
     assert len(filtered_configs['views']) == 3
