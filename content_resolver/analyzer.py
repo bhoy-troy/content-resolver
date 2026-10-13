@@ -33,7 +33,6 @@ from content_resolver.utils import (
     load_data,
     log,
     pkg_id_to_name,
-    size,
     url_to_id,
     workload_id_to_conf_id,
 )
@@ -45,6 +44,11 @@ def pkg_placeholder_name_to_id(placeholder_name):
 
 def pkg_placeholder_name_to_nevr(placeholder_name):
     return f"{placeholder_name}-000-placeholder"
+
+
+def _is_glob(pkg_name: str) -> bool:
+    """Check if a package name contains glob wildcard characters."""
+    return any(c in pkg_name for c in ('*', '?'))
 
 
 def is_package_resolvable(base: Base, pkg_name: str) -> bool:
@@ -62,8 +66,7 @@ def is_package_resolvable(base: Base, pkg_name: str) -> bool:
 
     # DNF5's filter_name() defaults to exact matching, so we must
     # explicitly use QueryCmp_GLOB when the name contains wildcards.
-    # TODO: do we need more precise wildcard chars?
-    is_glob = any(c in pkg_name for c in ('*', '?'))
+    is_glob = _is_glob(pkg_name)
 
     # First check if it exists as a real package name
     if is_glob:
@@ -86,6 +89,42 @@ def is_package_resolvable(base: Base, pkg_name: str) -> bool:
         return True
 
     return False
+
+
+def expand_package_glob(base: Base, pkg_name: str) -> list:
+    """
+    Expand a glob pattern into individual package names.
+
+    DNF5's goal.add_install() parses specs as NEVRA, so "uwsgi-*" is
+    interpreted as name="uwsgi" version="*" rather than a name glob.
+    This function expands globs via PackageQuery (which correctly supports
+    QueryCmp_GLOB) and returns deduplicated package names.
+
+    Args:
+        base: DNF5 base object
+        pkg_name: Package name potentially containing glob characters
+
+    Returns:
+        list: Expanded package names, or [pkg_name] if not a glob
+    """
+    if not _is_glob(pkg_name):
+        return [pkg_name]
+
+    query = PackageQuery(base)
+    query.filter_name([pkg_name], QueryCmp_GLOB)
+    query.filter_latest_evr()
+
+    names = sorted({pkg.get_name() for pkg in query})
+    if names:
+        return names
+
+    # Fall back to provides matching
+    query = PackageQuery(base)
+    query.filter_provides([pkg_name], QueryCmp_GLOB)
+    query.filter_latest_evr()
+
+    names = sorted({pkg.get_name() for pkg in query})
+    return names if names else [pkg_name]
 
 
 #####################################################
@@ -1121,7 +1160,8 @@ class Analyzer:
                 if not is_package_resolvable(base, pkg):
                     env["errors"]["non_existing_pkgs"].append(pkg)
                     continue
-                goal.add_install(pkg)
+                for expanded_pkg in expand_package_glob(base, pkg):
+                    goal.add_install(expanded_pkg)
 
             # Groups
             log("  Adding groups...")
@@ -1143,7 +1183,8 @@ class Analyzer:
                 if not is_package_resolvable(base, pkg):
                     env["errors"]["non_existing_pkgs"].append(pkg)
                     continue
-                goal.add_install(pkg)
+                for expanded_pkg in expand_package_glob(base, pkg):
+                    goal.add_install(expanded_pkg)
 
             # Resolve dependencies
             log("  Resolving dependencies...")
@@ -1423,7 +1464,11 @@ class Analyzer:
                         else:
                             workload["warnings"]["non_existing_pkgs"].append(pkg)
                         continue
-                goal.add_install(pkg)
+                # DNF5's goal.add_install() parses specs as NEVRA, so glob
+                # patterns like "uwsgi-*" get misinterpreted as name="uwsgi"
+                # version="*". Expand globs via PackageQuery first.
+                for expanded_pkg in expand_package_glob(base, pkg):
+                    goal.add_install(expanded_pkg)
 
             # Groups
             if workload_conf["groups"]:
@@ -1470,7 +1515,8 @@ class Analyzer:
                         else:
                             workload["warnings"]["non_existing_placeholder_deps"].append(pkg)
                         continue
-                    goal.add_install(pkg)
+                    for expanded_pkg in expand_package_glob(base, pkg):
+                        goal.add_install(expanded_pkg)
 
             # Architecture-specific packages
             for pkg in workload_conf["arch_packages"][arch]:
@@ -1481,7 +1527,8 @@ class Analyzer:
                     else:
                         workload["warnings"]["non_existing_pkgs"].append(pkg)
                     continue
-                goal.add_install(pkg)
+                for expanded_pkg in expand_package_glob(base, pkg):
+                    goal.add_install(expanded_pkg)
 
             if workload["errors"]["non_existing_pkgs"] or workload["errors"]["non_existing_placeholder_deps"]:
                 error_message_list = []
