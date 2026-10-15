@@ -1198,6 +1198,19 @@ class Analyzer:
                 env["errors"]["message"] = str(err)
                 return env
 
+            # CRITICAL DNF4 vs DNF5 DIFFERENCE:
+            # DNF5 does NOT raise exceptions for dependency failures - it returns
+            # a transaction with problems recorded. Without this check, environments
+            # with unresolvable deps silently succeed with missing packages.
+            if transaction.get_problems() > 0:
+                resolve_logs = transaction.get_resolve_logs_as_strings()
+                error_message = "\n".join(resolve_logs)
+                err_log(f"Failed to analyze environment '{env_conf['id']}' from '{repo['id']}' {arch}:")
+                err_log(f"  - {error_message[:500]}")
+                env["succeeded"] = False
+                env["errors"]["message"] = error_message
+                return env
+
             # Write the result into RPMDB.
             # The transaction needs us to download all the packages. :(
             # So let's do that to make it happy.
@@ -1641,8 +1654,22 @@ class Analyzer:
                 is_real_error = has_nothing_provides
 
                 if is_repo_conflict and not is_real_error:
-                    # Repo priority conflict - expected behavior, ignore
-                    log("  Ignoring repository priority conflict (version mismatch between repos)")
+                    # Repo priority conflict — check if packages were still resolved
+                    # despite the conflict. If the transaction is empty, the conflict
+                    # prevented installation and must be reported as a real failure.
+                    trans_pkgs_check = transaction.get_transaction_packages()
+                    if trans_pkgs_check.size() > 0:
+                        log("  Ignoring repository priority conflict (version mismatch between repos)")
+                    else:
+                        workload["succeeded"] = False
+                        workload["errors"]["message"] = (
+                            "Repository version conflicts prevented package resolution:\n\n"
+                            + error_message
+                        )
+                        log(f"  Failed: repo conflicts prevented package installation for {workload_conf['id']}")
+                        error_display = error_message if len(error_message) <= 500 else error_message[:500] + "...(truncated)"
+                        log(f"  Conflict details: {error_display}")
+                        return workload
                 else:
                     # Real dependency failure
                     workload["succeeded"] = False
@@ -1667,6 +1694,30 @@ class Analyzer:
                 trans_pkg = trans_pkgs[i]
                 pkgs_added.append(trans_pkg.get_package())
             pkgs_added = set(pkgs_added)
+
+            # Post-resolution validation: if the workload requested packages but
+            # none ended up in the transaction, the resolution silently failed.
+            # This catches the DNF5 behavior where goal.resolve() succeeds with
+            # 0 problems but also 0 results (packages simply not acted upon).
+            requested_pkgs = list(workload_conf["packages"]) + list(workload_conf["arch_packages"][arch])
+            if not pkgs_added and requested_pkgs:
+                # Check if the requested packages are in the environment instead
+                env_pkg_names = {pkg.get_name() for pkg in pkgs_env}
+                plain_requested = [p for p in requested_pkgs if not _is_glob(p)]
+                missing_from_env = [p for p in plain_requested if p not in env_pkg_names]
+
+                if missing_from_env:
+                    workload["succeeded"] = False
+                    workload["errors"]["message"] = (
+                        "No workload packages were resolved. "
+                        "DNF5 resolved dependencies successfully but produced an empty transaction.\n"
+                        "This typically means the requested packages could not be installed "
+                        "due to repository priority conflicts or dependency issues.\n\n"
+                        f"Packages not found in environment or transaction: {', '.join(sorted(missing_from_env))}"
+                    )
+                    log(f"  Failed: 0 packages resolved for {workload_conf['id']} "
+                        f"(missing: {', '.join(sorted(missing_from_env))})")
+                    return workload
 
             pkgs_all = set.union(pkgs_env, pkgs_added)
 
