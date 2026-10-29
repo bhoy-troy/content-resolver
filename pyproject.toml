@@ -32,5 +32,11 @@ select = ["E", "W", "F",  "I", "C", "B", "UP", "COM812"]
 ignore = ["E501", "B019", "C901", "COM812"]
 extend-select = ["B"]
 
+[tool.ruff.lint.per-file-ignores]
+"tests/test_package_glob_expansion.py" = ["F401"]
+"tests/test_dnf5_exception_handling.py" = ["F401"]
+"tests/conftest.py" = ["F401"]
+"*.ipynb" = ["ALL"]
+
 [tool.ruff.lint.isort]
 split-on-trailing-comma=true
