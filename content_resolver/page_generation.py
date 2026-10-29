@@ -278,7 +278,7 @@ def _generate_env_pages(query):
                 "repo_id": repo_id,
                 "repo": repo,
                 "columns": columns,
-                "rows": rows,
+                "rows": rows
             }
 
             page_name = f"env-cmp-arches--{env_conf_id}--{repo_id}"
@@ -441,6 +441,8 @@ def _generate_view_pages(query):
             "query": query,
             "view_conf": view_conf,
             "view_all_arches": view_all_arches,
+            # Date-to-filename map for the daily snapshots date picker
+            "historic_daily_dates": query.data.get("historic_daily_dates", {}),
         }
 
         # Generate the overview page
