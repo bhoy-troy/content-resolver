@@ -233,7 +233,7 @@ class Query:
         # This means nothing has been found!
         if not list_all:
             return False
-        return sorted(list(matching_ids))
+        return sorted(matching_ids)
 
     @cache
     def envs_id(self, env_id, list_all=False, output_change=None):

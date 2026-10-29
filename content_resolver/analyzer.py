@@ -65,7 +65,7 @@ def pkg_placeholder_name_to_nevr(placeholder_name):
 def _is_glob(pkg_name: str) -> bool:
     """Check if a package name contains glob wildcard characters."""
     # TODO: do we need more precise wildcard chars?
-    return any(c in pkg_name for c in ('*', '?'))
+    return any(c in pkg_name for c in ("*", "?"))
 
 
 def is_package_resolvable(base: Base, pkg_name: str) -> bool:
@@ -1961,11 +1961,12 @@ class Analyzer:
                     else:
                         workload["succeeded"] = False
                         workload["errors"]["message"] = (
-                            "Repository version conflicts may prevent package resolution:\n\n"
-                            + error_message
+                            "Repository version conflicts may prevent package resolution:\n\n" + error_message
                         )
                         log(f"  Failed: repo conflicts may prevent package installation for {workload_conf['id']}")
-                        error_display = error_message if len(error_message) <= 500 else error_message[:500] + "...(truncated)"
+                        error_display = (
+                            error_message if len(error_message) <= 500 else error_message[:500] + "...(truncated)"
+                        )
                         log(f"  Conflict details: {error_display}")
                         return workload
                 else:
@@ -2015,8 +2016,10 @@ class Analyzer:
                         "due to repository priority conflicts or dependency issues.\n\n"
                         f"Packages not found in environment or transaction: {', '.join(sorted(missing_from_env))}"
                     )
-                    log(f"  Failed: 0 packages resolved for {workload_conf['id']} "
-                        f"(missing: {', '.join(sorted(missing_from_env))})")
+                    log(
+                        f"  Failed: 0 packages resolved for {workload_conf['id']} "
+                        f"(missing: {', '.join(sorted(missing_from_env))})"
+                    )
                     return workload
 
             pkgs_all = set.union(pkgs_env, pkgs_added)
@@ -4411,7 +4414,7 @@ class Analyzer:
                     # Jump another sub-level down
                     prev_score = score
                     prev_sublevel = sublevel
-                    #sublevel += 1
+                    # sublevel += 1
                     sublevel = str(int(sublevel) + 1)
                     score = (level, sublevel)
 

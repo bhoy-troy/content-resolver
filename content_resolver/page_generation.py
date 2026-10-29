@@ -278,7 +278,7 @@ def _generate_env_pages(query):
                 "repo_id": repo_id,
                 "repo": repo,
                 "columns": columns,
-                "rows": rows
+                "rows": rows,
             }
 
             page_name = f"env-cmp-arches--{env_conf_id}--{repo_id}"
@@ -574,6 +574,7 @@ def generate_pages(query):
         loader=template_loader,
         trim_blocks=True,
         lstrip_blocks=True,
+        autoescape=True,
     )
     query.settings["jinja2_template_env"] = template_env
 

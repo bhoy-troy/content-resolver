@@ -23,20 +23,19 @@ def _daily_snapshot_file_path(query, prefix):
 def _save_current_historic_data_daily(query):
     """Snapshot the current days's metrics and append them to the history directory.
 
-   Collects package counts and install sizes for every succeeded workload and
-   environment, package counts per repository/arch, and SRPM counts for each
-   view configuration.  The resulting dict is serialised to a JSON file named
-   ``historic_data-<year>_<month>_<day>.json`` inside ``<output>/history/``.
-   An existing file for the same week is silently overwritten.
+    Collects package counts and install sizes for every succeeded workload and
+    environment, package counts per repository/arch, and SRPM counts for each
+    view configuration.  The resulting dict is serialised to a JSON file named
+    ``historic_data-<year>_<month>_<day>.json`` inside ``<output>/history/``.
+    An existing file for the same week is silently overwritten.
 
-   Args:
-       query: A fully-resolved ``QueryObject`` (or equivalent) whose
-           ``settings``, ``configs``, and ``data`` attributes provide the
-           workload/env/repo/view results to snapshot.
-   """
+    Args:
+        query: A fully-resolved ``QueryObject`` (or equivalent) whose
+            ``settings``, ``configs``, and ``data`` attributes provide the
+            workload/env/repo/view results to snapshot.
+    """
     # Daily historic data for charts
     # Package lists are saved separately by _save_current_historic_data_daily_pkgs
-
 
     log("Generating current daily historic data...")
 
@@ -92,7 +91,7 @@ def _save_current_historic_data_daily(query):
             history_data["repos"][repo_id][arch] = repo_history
 
     # Views
-    for view_conf_id, view_conf in query.configs["views"].items():
+    for view_conf_id in query.configs["views"].keys():
         view_all_arches = query.data["views_all_arches"][view_conf_id]
 
         view_data = {
@@ -136,7 +135,6 @@ def _save_current_historic_data_daily_pkgs(query):
     }
 
     for view_conf_id, view_conf in query.configs["views"].items():
-
         # Sets remove duplicates across arches
         all_source_names = set()
         all_source_nevrs = set()
@@ -149,7 +147,7 @@ def _save_current_historic_data_daily_pkgs(query):
             view_id = f"{view_conf_id}:{arch}"
             view = query.data["views"][view_id]
 
-            for pkg_id, pkg in view["pkgs"].items():
+            for pkg in view["pkgs"].values():
                 source_name = pkg["source_name"]
                 source_nevr = pkg["sourcerpm"].rsplit(".src.rpm")[0]
 
@@ -206,10 +204,7 @@ def _read_historic_data(query):
     directory = os.path.join(query.settings["output"], "history")
 
     # Filter for weekly snapshot files
-    valid_filenames = sorted(
-        f for f in os.listdir(directory)
-        if re.match(r"historic_data-\d{4}-week_\d{2}\.json", f)
-    )
+    valid_filenames = sorted(f for f in os.listdir(directory) if re.match(r"historic_data-\d{4}-week_\d{2}\.json", f))
 
     # Get the data
     historic_data = {}
@@ -240,20 +235,17 @@ def _read_historic_data_daily(query):
     directory = os.path.join(query.settings["output"], "history")
 
     # Filter for daily snapshot files
-    valid_filenames = sorted(
-        f for f in os.listdir(directory)
-        if re.match(r"historic_data-\d{4}-day_\d{3}\.json", f)
-    )
+    valid_filenames = sorted(f for f in os.listdir(directory) if re.match(r"historic_data-\d{4}-day_\d{3}\.json", f))
 
     # Get the data
     historic_data_daily = {}
 
     for filename in valid_filenames:
-        with open(os.path.join(directory, filename), "r") as file:
+        with open(os.path.join(directory, filename)) as file:
             try:
                 document = json.load(file)
                 date = document["date"]
-            except (KeyError, ValueError):
+            except KeyError, ValueError:
                 err_log(f"Invalid file in daily historic data: {filename}. Ignoring.")
                 continue
 
@@ -278,9 +270,7 @@ def _list_historic_data_daily_pkgs_dates(query):
         year, day_of_year = match.groups()
 
         try:
-            date = datetime.datetime.strptime(
-                f"{year}-{day_of_year}", "%Y-%j"
-            ).strftime("%Y-%m-%d")
+            date = datetime.datetime.strptime(f"{year}-{day_of_year}", "%Y-%j").strftime("%Y-%m-%d")
         except ValueError:
             err_log(f"Invalid file in daily package lists: {filename}. Ignoring.")
             continue
