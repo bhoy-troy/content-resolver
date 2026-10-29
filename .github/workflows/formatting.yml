@@ -1,0 +1,27 @@
+name: Ruff
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v5
+
+    - name: Install Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.14"
+
+    - name: Install ruff
+      run: pip install ruff
+
+    - name: Ruff check
+      run: ruff check content_resolver content_resolver.py
+
+    - name: Ruff format check
+      run: ruff format --check content_resolver content_resolver.py
