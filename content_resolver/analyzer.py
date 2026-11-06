@@ -2835,7 +2835,7 @@ class Analyzer:
         for view_conf_id in self.configs["views"]:
             view_conf = self.configs["views"][view_conf_id]
 
-            if view_conf["type"] == "compose":
+            if view_conf["type"] in ("compose", "addon"):
                 if view_conf["buildroot_strategy"] == "root_logs":
                     for arch in view_conf["architectures"]:
                         self._populate_buildroot_with_view_srpms(view_conf, arch)
@@ -2904,6 +2904,16 @@ class Analyzer:
 
         view = self.data["views"][view_id]
 
+        # De-duplication
+        # For addon views, collect the base view's package IDs to allow
+        # skip packages that are already in the base view.
+        base_view_pkg_ids = set()
+        if view_conf["type"] == "addon":
+            base_view_conf_id = view_conf["base_view_id"]
+            base_view_id = f"{base_view_conf_id}:{arch}"
+            if base_view_id in self.data["views"]:
+                base_view_pkg_ids = set(self.data["views"][base_view_id]["pkgs"].keys())
+
         log("")
         log(f"Adding buildroot to view {view_id}...")
 
@@ -2926,6 +2936,9 @@ class Analyzer:
 
                 # Packages in the base buildroot (which would be the environment in workloads)
                 for pkg_id in buildroot_srpm["pkg_env_ids"]:
+                    # skip if already in base view
+                    if pkg_id in base_view_pkg_ids:
+                        continue
                     added_pkg_ids.add(pkg_id)
 
                     # Initialise
@@ -2957,6 +2970,9 @@ class Analyzer:
 
                 # Packages needed on top of the base buildroot (required or dependency)
                 for pkg_id in buildroot_srpm["pkg_added_ids"]:
+                    if pkg_id in base_view_pkg_ids:
+                        # skip if already in base view
+                        continue
                     added_pkg_ids.add(pkg_id)
 
                     # Initialise
@@ -3034,12 +3050,10 @@ class Analyzer:
         for view_conf_id in self.configs["views"]:
             view_conf = self.configs["views"][view_conf_id]
 
-            if view_conf["type"] == "compose":
+            if view_conf["type"] in ("compose", "addon"):
                 if view_conf["buildroot_strategy"] == "root_logs":
                     for arch in view_conf["architectures"]:
                         self._add_buildroot_to_view(view_conf, arch)
-
-        # And the addon is not supported now
 
         log("")
         log("  DONE!")
@@ -3282,11 +3296,9 @@ class Analyzer:
                 view_all_arches["id"] = view_conf_id
                 view_all_arches["has_buildroot"] = False
 
-                if view_conf["type"] == "compose":
+                if view_conf["type"] in ("compose", "addon"):
                     if view_conf["buildroot_strategy"] == "root_logs":
                         view_all_arches["has_buildroot"] = True
-                else:
-                    view_all_arches["has_buildroot"] = False
 
                 view_all_arches["everything_succeeded"] = True
                 view_all_arches["no_warnings"] = True
@@ -3589,7 +3601,7 @@ class Analyzer:
         for view_conf_id in self.configs["views"]:
             view_conf = self.configs["views"][view_conf_id]
 
-            if view_conf["type"] == "compose":
+            if view_conf["type"] in ("compose", "addon"):
                 if view_conf["buildroot_strategy"] == "root_logs":
                     for arch in view_conf["architectures"]:
 
