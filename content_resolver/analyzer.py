@@ -3281,237 +3281,234 @@ class Analyzer:
 
         for view_conf_id, view_conf in self.configs["views"].items():
 
-            #if view_conf["type"] == "compose":
-            if True:
-                repo_id = view_conf["repository"]
-                # has buildroot now checks compose & addon
-                has_buildroot = (view_conf["type"] in ("compose", "addon")
-                                 and view_conf["buildroot_strategy"] == "root_logs")
-                _zero_counts = {
-                    "runtime": 0,
-                    "env": 0,
-                    "req": 0,
-                    "dep": 0,
-                    "build": 0,
-                    "build_base": 0,
-                    "build_level_1": 0,
-                    "build_level_2_plus": 0,
+            repo_id = view_conf["repository"]
+            has_buildroot = (view_conf["type"] in ("compose", "addon")
+                            and view_conf["buildroot_strategy"] == "root_logs")
+            _zero_counts = {
+                "runtime": 0,
+                "env": 0,
+                "req": 0,
+                "dep": 0,
+                "build": 0,
+                "build_base": 0,
+                "build_level_1": 0,
+                "build_level_2_plus": 0,
+            }
+
+            view_all_arches = {
+                "id": view_conf_id,
+                "has_buildroot": has_buildroot,
+                "everything_succeeded": True,
+                "no_warnings": True,
+                "workloads": {},
+                "pkgs_by_name": {},
+                "pkgs_by_nevr": {},
+                "source_pkgs_by_name": {},
+                # dict() copies needed so pkgs and srpms don't share the same object
+                # increment in one would affect the other without a new object
+                "numbers": {
+                    "pkgs": dict(_zero_counts),
+                    "srpms": dict(_zero_counts),
                 }
+            }
 
-                view_all_arches = {
-                    "id": view_conf_id,
-                    "has_buildroot": has_buildroot,
-                    "everything_succeeded": True,
-                    "no_warnings": True,
-                    "workloads": {},
-                    "pkgs_by_name": {},
-                    "pkgs_by_nevr": {},
-                    "source_pkgs_by_name": {},
-                    # dict() copies needed so pkgs and srpms don't share the same object
-                    # increment in one would affect the other without a ne object
-                    "numbers": {
-                        "pkgs": dict(_zero_counts),
-                        "srpms": dict(_zero_counts),
-                    }
-                }
+            for arch in view_conf["architectures"]:
+                view_id = f"{view_conf_id}:{arch}"
+                view = self.data["views"][view_id]
 
-                for arch in view_conf["architectures"]:
-                    view_id = f"{view_conf_id}:{arch}"
-                    view = self.data["views"][view_id]
+                # Workloads
+                for workload_id in view["workload_ids"]:
+                    workload = self.data["workloads"][workload_id]
+                    workload_conf_id = workload["workload_conf_id"]
+                    workload_conf = self.configs["workloads"][workload_conf_id]
 
-                    # Workloads
-                    for workload_id in view["workload_ids"]:
-                        workload = self.data["workloads"][workload_id]
-                        workload_conf_id = workload["workload_conf_id"]
-                        workload_conf = self.configs["workloads"][workload_conf_id]
+                    if workload_conf_id not in view_all_arches["workloads"]:
+                        view_all_arches["workloads"][workload_conf_id] = {}
+                        view_all_arches["workloads"][workload_conf_id]["workload_conf_id"] = workload_conf_id
+                        view_all_arches["workloads"][workload_conf_id]["name"] = workload_conf["name"]
+                        view_all_arches["workloads"][workload_conf_id]["maintainer"] = workload_conf["maintainer"]
+                        view_all_arches["workloads"][workload_conf_id]["succeeded"] = True
+                        view_all_arches["workloads"][workload_conf_id]["no_warnings"] = True
+                        # ...
 
-                        if workload_conf_id not in view_all_arches["workloads"]:
-                            view_all_arches["workloads"][workload_conf_id] = {}
-                            view_all_arches["workloads"][workload_conf_id]["workload_conf_id"] = workload_conf_id
-                            view_all_arches["workloads"][workload_conf_id]["name"] = workload_conf["name"]
-                            view_all_arches["workloads"][workload_conf_id]["maintainer"] = workload_conf["maintainer"]
-                            view_all_arches["workloads"][workload_conf_id]["succeeded"] = True
-                            view_all_arches["workloads"][workload_conf_id]["no_warnings"] = True
-                            # ...
+                    if not workload["succeeded"]:
+                        view_all_arches["workloads"][workload_conf_id]["succeeded"] = False
+                        view_all_arches["everything_succeeded"] = False
 
-                        if not workload["succeeded"]:
-                            view_all_arches["workloads"][workload_conf_id]["succeeded"] = False
-                            view_all_arches["everything_succeeded"] = False
+                    if workload["warnings"]["message"]:
+                        view_all_arches["workloads"][workload_conf_id]["no_warnings"] = False
+                        view_all_arches["no_warnings"] = False
 
-                        if workload["warnings"]["message"]:
-                            view_all_arches["workloads"][workload_conf_id]["no_warnings"] = False
-                            view_all_arches["no_warnings"] = False
+                # Binary Packages
+                for package in view["pkgs"].values():
+                    # Binary Packages by name
+                    key = "pkgs_by_name"
+                    identifier = package["name"]
 
-                    # Binary Packages
-                    for package in view["pkgs"].values():
-                        # Binary Packages by name
-                        key = "pkgs_by_name"
-                        identifier = package["name"]
+                    # Init
+                    if identifier not in view_all_arches[key]:
+                        view_all_arches[key][identifier] = {}
+                        view_all_arches[key][identifier]["name"] = package["name"]
+                        view_all_arches[key][identifier]["placeholder"] = package["placeholder"]
+                        view_all_arches[key][identifier]["source_name"] = package["source_name"]
+                        view_all_arches[key][identifier]["nevrs"] = {}
+                        view_all_arches[key][identifier]["arches"] = set()
+                        view_all_arches[key][identifier]["highest_priority_reponames_per_arch"] = {}
 
-                        # Init
-                        if identifier not in view_all_arches[key]:
-                            view_all_arches[key][identifier] = {}
-                            view_all_arches[key][identifier]["name"] = package["name"]
-                            view_all_arches[key][identifier]["placeholder"] = package["placeholder"]
-                            view_all_arches[key][identifier]["source_name"] = package["source_name"]
-                            view_all_arches[key][identifier]["nevrs"] = {}
-                            view_all_arches[key][identifier]["arches"] = set()
-                            view_all_arches[key][identifier]["highest_priority_reponames_per_arch"] = {}
+                        self._init_pkg_or_srpm_relations_fields(view_all_arches[key][identifier], type="rpm")
 
-                            self._init_pkg_or_srpm_relations_fields(view_all_arches[key][identifier], type="rpm")
+                    if package["nevr"] not in view_all_arches[key][identifier]["nevrs"]:
+                        view_all_arches[key][identifier]["nevrs"][package["nevr"]] = set()
+                    view_all_arches[key][identifier]["nevrs"][package["nevr"]].add(arch)
 
-                        if package["nevr"] not in view_all_arches[key][identifier]["nevrs"]:
-                            view_all_arches[key][identifier]["nevrs"][package["nevr"]] = set()
-                        view_all_arches[key][identifier]["nevrs"][package["nevr"]].add(arch)
+                    view_all_arches[key][identifier]["arches"].add(arch)
 
-                        view_all_arches[key][identifier]["arches"].add(arch)
+                    if arch not in view_all_arches[key][identifier]["highest_priority_reponames_per_arch"]:
+                        view_all_arches[key][identifier]["highest_priority_reponames_per_arch"][arch] = set()
+                    view_all_arches[key][identifier]["highest_priority_reponames_per_arch"][arch].update(package["highest_priority_reponames"])
 
-                        if arch not in view_all_arches[key][identifier]["highest_priority_reponames_per_arch"]:
-                            view_all_arches[key][identifier]["highest_priority_reponames_per_arch"][arch] = set()
-                        view_all_arches[key][identifier]["highest_priority_reponames_per_arch"][arch].update(package["highest_priority_reponames"])
+                    self._populate_pkg_or_srpm_relations_fields(view_all_arches[key][identifier], package, type="rpm", view=view)
 
-                        self._populate_pkg_or_srpm_relations_fields(view_all_arches[key][identifier], package, type="rpm", view=view)
+                    # Binary Packages by nevr
+                    key = "pkgs_by_nevr"
+                    identifier = package["nevr"]
 
-                        # Binary Packages by nevr
-                        key = "pkgs_by_nevr"
-                        identifier = package["nevr"]
+                    if identifier not in view_all_arches[key]:
+                        view_all_arches[key][identifier] = {}
+                        view_all_arches[key][identifier]["name"] = package["name"]
+                        view_all_arches[key][identifier]["placeholder"] = package["placeholder"]
+                        view_all_arches[key][identifier]["evr"] = package["evr"]
+                        view_all_arches[key][identifier]["source_name"] = package["source_name"]
+                        view_all_arches[key][identifier]["arches"] = set()
+                        view_all_arches[key][identifier]["arches_arches"] = {}
+                        view_all_arches[key][identifier]["reponame_per_arch"] = {}
+                        view_all_arches[key][identifier]["highest_priority_reponames_per_arch"] = {}
+                        view_all_arches[key][identifier]["category"] = None
 
-                        if identifier not in view_all_arches[key]:
-                            view_all_arches[key][identifier] = {}
-                            view_all_arches[key][identifier]["name"] = package["name"]
-                            view_all_arches[key][identifier]["placeholder"] = package["placeholder"]
-                            view_all_arches[key][identifier]["evr"] = package["evr"]
-                            view_all_arches[key][identifier]["source_name"] = package["source_name"]
-                            view_all_arches[key][identifier]["arches"] = set()
-                            view_all_arches[key][identifier]["arches_arches"] = {}
-                            view_all_arches[key][identifier]["reponame_per_arch"] = {}
-                            view_all_arches[key][identifier]["highest_priority_reponames_per_arch"] = {}
-                            view_all_arches[key][identifier]["category"] = None
+                        self._init_pkg_or_srpm_relations_fields(view_all_arches[key][identifier], type="rpm")
 
-                            self._init_pkg_or_srpm_relations_fields(view_all_arches[key][identifier], type="rpm")
+                    view_all_arches[key][identifier]["arches"].add(arch)
+                    view_all_arches[key][identifier]["reponame_per_arch"][arch] = package["reponame"]
+                    view_all_arches[key][identifier]["highest_priority_reponames_per_arch"][arch] = package["highest_priority_reponames"]
 
-                        view_all_arches[key][identifier]["arches"].add(arch)
-                        view_all_arches[key][identifier]["reponame_per_arch"][arch] = package["reponame"]
-                        view_all_arches[key][identifier]["highest_priority_reponames_per_arch"][arch] = package["highest_priority_reponames"]
+                    if arch not in view_all_arches[key][identifier]["arches_arches"]:
+                        view_all_arches[key][identifier]["arches_arches"][arch] = set()
+                    view_all_arches[key][identifier]["arches_arches"][arch].add(package["arch"])
 
-                        if arch not in view_all_arches[key][identifier]["arches_arches"]:
-                            view_all_arches[key][identifier]["arches_arches"][arch] = set()
-                        view_all_arches[key][identifier]["arches_arches"][arch].add(package["arch"])
-
-                        self._populate_pkg_or_srpm_relations_fields(view_all_arches[key][identifier], package, type="rpm", view=view)
+                    self._populate_pkg_or_srpm_relations_fields(view_all_arches[key][identifier], package, type="rpm", view=view)
 
 
-                    # Source Packages
-                    for package in view["source_pkgs"].values():
-                        # Source Packages by name
-                        key = "source_pkgs_by_name"
-                        identifier = package["name"]
+                # Source Packages
+                for package in view["source_pkgs"].values():
+                    # Source Packages by name
+                    key = "source_pkgs_by_name"
+                    identifier = package["name"]
 
-                        if identifier not in view_all_arches[key]:
-                            view_all_arches[key][identifier] = {}
-                            view_all_arches[key][identifier]["name"] = package["name"]
-                            view_all_arches[key][identifier]["placeholder"] = package["placeholder"]
-                            if view_all_arches["has_buildroot"]:
-                                view_all_arches[key][identifier]["buildroot_succeeded"] = True
-                                view_all_arches[key][identifier]["buildroot_no_warnings"] = True
-                            view_all_arches[key][identifier]["errors"] = {}
-                            view_all_arches[key][identifier]["warnings"] = {}
-                            view_all_arches[key][identifier]["pkg_names"] = set()
-                            view_all_arches[key][identifier]["pkg_nevrs"] = set()
-                            view_all_arches[key][identifier]["arches"] = set()
-                            view_all_arches[key][identifier]["category"] = None
-
-                            self._init_pkg_or_srpm_relations_fields(view_all_arches[key][identifier])
-
+                    if identifier not in view_all_arches[key]:
+                        view_all_arches[key][identifier] = {}
+                        view_all_arches[key][identifier]["name"] = package["name"]
+                        view_all_arches[key][identifier]["placeholder"] = package["placeholder"]
                         if view_all_arches["has_buildroot"]:
-                            if not self.data["buildroot"]["srpms"][repo_id][arch][package["id"]]["succeeded"]:
-                                view_all_arches["everything_succeeded"] = False
-                                view_all_arches[key][identifier]["buildroot_succeeded"] = False
-                                view_all_arches[key][identifier]["errors"][arch] = self.data["buildroot"]["srpms"][repo_id][arch][package["id"]]["errors"]
-                            if self.data["buildroot"]["srpms"][repo_id][arch][package["id"]]["warnings"]["message"]:
-                                view_all_arches["no_warnings"] = False
-                                view_all_arches[key][identifier]["buildroot_no_warnings"] = False
-                                view_all_arches[key][identifier]["warnings"][arch] = self.data["buildroot"]["srpms"][repo_id][arch][package["id"]]["warnings"]
+                            view_all_arches[key][identifier]["buildroot_succeeded"] = True
+                            view_all_arches[key][identifier]["buildroot_no_warnings"] = True
+                        view_all_arches[key][identifier]["errors"] = {}
+                        view_all_arches[key][identifier]["warnings"] = {}
+                        view_all_arches[key][identifier]["pkg_names"] = set()
+                        view_all_arches[key][identifier]["pkg_nevrs"] = set()
+                        view_all_arches[key][identifier]["arches"] = set()
+                        view_all_arches[key][identifier]["category"] = None
+
+                        self._init_pkg_or_srpm_relations_fields(view_all_arches[key][identifier])
+
+                    if view_all_arches["has_buildroot"]:
+                        if not self.data["buildroot"]["srpms"][repo_id][arch][package["id"]]["succeeded"]:
+                            view_all_arches["everything_succeeded"] = False
+                            view_all_arches[key][identifier]["buildroot_succeeded"] = False
+                            view_all_arches[key][identifier]["errors"][arch] = self.data["buildroot"]["srpms"][repo_id][arch][package["id"]]["errors"]
+                        if self.data["buildroot"]["srpms"][repo_id][arch][package["id"]]["warnings"]["message"]:
+                            view_all_arches["no_warnings"] = False
+                            view_all_arches[key][identifier]["buildroot_no_warnings"] = False
+                            view_all_arches[key][identifier]["warnings"][arch] = self.data["buildroot"]["srpms"][repo_id][arch][package["id"]]["warnings"]
 
 
-                        view_all_arches[key][identifier]["arches"].add(arch)
+                    view_all_arches[key][identifier]["arches"].add(arch)
 
-                        self._populate_pkg_or_srpm_relations_fields(view_all_arches[key][identifier], package, type="srpm")
+                    self._populate_pkg_or_srpm_relations_fields(view_all_arches[key][identifier], package, type="srpm")
 
 
-                    # Add binary packages to source packages
-                    for pkg_id, pkg in view["pkgs"].items():
+                # Add binary packages to source packages
+                for pkg_id, pkg in view["pkgs"].items():
 
-                        source_name = pkg["source_name"]
+                    source_name = pkg["source_name"]
 
-                        # Add package names
-                        view_all_arches["source_pkgs_by_name"][source_name]["pkg_names"].add(pkg["name"])
+                    # Add package names
+                    view_all_arches["source_pkgs_by_name"][source_name]["pkg_names"].add(pkg["name"])
 
-                        # Add package nevrs
-                        pkg_nevr = f"{pkg['name']}-{pkg['evr']}"
-                        view_all_arches["source_pkgs_by_name"][source_name]["pkg_nevrs"].add(pkg_nevr)
+                    # Add package nevrs
+                    pkg_nevr = f"{pkg['name']}-{pkg['evr']}"
+                    view_all_arches["source_pkgs_by_name"][source_name]["pkg_nevrs"].add(pkg_nevr)
 
-                # RPMs
-                for pkg in view_all_arches["pkgs_by_nevr"].values():
-                    category = None
-                    if pkg["in_workload_ids_env"]:
-                        category = "env"
-                    elif pkg["in_workload_ids_req"]:
-                        category = "req"
-                    elif pkg["in_workload_ids_dep"]:
-                        category = "dep"
-                    elif pkg["in_buildroot_of_srpm_id_env"]:
-                        category = "build_base"
-                    elif pkg["in_buildroot_of_srpm_id_req"] or pkg["in_buildroot_of_srpm_id_dep"]:
-                        if pkg["level_number"] == 1:
-                            category = "build_level_1"
-                        elif pkg["level_number"] > 1:
-                            category = "build_level_2_plus"
+            # RPMs
+            for pkg in view_all_arches["pkgs_by_nevr"].values():
+                category = None
+                if pkg["in_workload_ids_env"]:
+                    category = "env"
+                elif pkg["in_workload_ids_req"]:
+                    category = "req"
+                elif pkg["in_workload_ids_dep"]:
+                    category = "dep"
+                elif pkg["in_buildroot_of_srpm_id_env"]:
+                    category = "build_base"
+                elif pkg["in_buildroot_of_srpm_id_req"] or pkg["in_buildroot_of_srpm_id_dep"]:
+                    if pkg["level_number"] == 1:
+                        category = "build_level_1"
+                    elif pkg["level_number"] > 1:
+                        category = "build_level_2_plus"
 
-                    if category is not None:
-                        view_all_arches["numbers"]["pkgs"][category] += 1
+                if category is not None:
+                    view_all_arches["numbers"]["pkgs"][category] += 1
 
-                view_all_arches["numbers"]["pkgs"]["runtime"] = \
-                    view_all_arches["numbers"]["pkgs"]["env"] + \
-                    view_all_arches["numbers"]["pkgs"]["req"] + \
-                    view_all_arches["numbers"]["pkgs"]["dep"]
-                view_all_arches["numbers"]["pkgs"]["build"] = \
-                    view_all_arches["numbers"]["pkgs"]["build_base"] + \
-                    view_all_arches["numbers"]["pkgs"]["build_level_1"] + \
-                    view_all_arches["numbers"]["pkgs"]["build_level_2_plus"]
+            view_all_arches["numbers"]["pkgs"]["runtime"] = \
+                view_all_arches["numbers"]["pkgs"]["env"] + \
+                view_all_arches["numbers"]["pkgs"]["req"] + \
+                view_all_arches["numbers"]["pkgs"]["dep"]
+            view_all_arches["numbers"]["pkgs"]["build"] = \
+                view_all_arches["numbers"]["pkgs"]["build_base"] + \
+                view_all_arches["numbers"]["pkgs"]["build_level_1"] + \
+                view_all_arches["numbers"]["pkgs"]["build_level_2_plus"]
 
-                # SRPMs
-                for pkg in view_all_arches["source_pkgs_by_name"].values():
-                    category = None
-                    if pkg["in_workload_ids_env"]:
-                        category = "env"
-                    elif pkg["in_workload_ids_req"]:
-                        category = "req"
-                    elif pkg["in_workload_ids_dep"]:
-                        category = "dep"
-                    elif pkg["in_buildroot_of_srpm_id_env"]:
-                        category = "build_base"
-                    elif pkg["in_buildroot_of_srpm_id_req"] or pkg["in_buildroot_of_srpm_id_dep"]:
-                        if pkg["level_number"] == 1:
-                            category = "build_level_1"
-                        elif pkg["level_number"] > 1:
-                            category = "build_level_2_plus"
+            # SRPMs
+            for pkg in view_all_arches["source_pkgs_by_name"].values():
+                category = None
+                if pkg["in_workload_ids_env"]:
+                    category = "env"
+                elif pkg["in_workload_ids_req"]:
+                    category = "req"
+                elif pkg["in_workload_ids_dep"]:
+                    category = "dep"
+                elif pkg["in_buildroot_of_srpm_id_env"]:
+                    category = "build_base"
+                elif pkg["in_buildroot_of_srpm_id_req"] or pkg["in_buildroot_of_srpm_id_dep"]:
+                    if pkg["level_number"] == 1:
+                        category = "build_level_1"
+                    elif pkg["level_number"] > 1:
+                        category = "build_level_2_plus"
 
-                    if category is not None:
-                        view_all_arches["numbers"]["srpms"][category] += 1
+                if category is not None:
+                    view_all_arches["numbers"]["srpms"][category] += 1
 
-                view_all_arches["numbers"]["srpms"]["runtime"] = \
-                    view_all_arches["numbers"]["srpms"]["env"] + \
-                    view_all_arches["numbers"]["srpms"]["req"] + \
-                    view_all_arches["numbers"]["srpms"]["dep"]
+            view_all_arches["numbers"]["srpms"]["runtime"] = \
+                view_all_arches["numbers"]["srpms"]["env"] + \
+                view_all_arches["numbers"]["srpms"]["req"] + \
+                view_all_arches["numbers"]["srpms"]["dep"]
 
-                view_all_arches["numbers"]["srpms"]["build"] = \
-                    view_all_arches["numbers"]["srpms"]["build_base"] + \
-                    view_all_arches["numbers"]["srpms"]["build_level_1"] + \
-                    view_all_arches["numbers"]["srpms"]["build_level_2_plus"]
+            view_all_arches["numbers"]["srpms"]["build"] = \
+                view_all_arches["numbers"]["srpms"]["build_base"] + \
+                view_all_arches["numbers"]["srpms"]["build_level_1"] + \
+                view_all_arches["numbers"]["srpms"]["build_level_2_plus"]
 
-                # Done
-                views_all_arches[view_conf_id] = view_all_arches
+            # Done
+            views_all_arches[view_conf_id] = view_all_arches
 
         self.data["views_all_arches"] = views_all_arches
 
