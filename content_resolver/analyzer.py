@@ -3323,13 +3323,13 @@ class Analyzer:
                     workload_conf = self.configs["workloads"][workload_conf_id]
 
                     if workload_conf_id not in view_all_arches["workloads"]:
-                        view_all_arches["workloads"][workload_conf_id] = {}
-                        view_all_arches["workloads"][workload_conf_id]["workload_conf_id"] = workload_conf_id
-                        view_all_arches["workloads"][workload_conf_id]["name"] = workload_conf["name"]
-                        view_all_arches["workloads"][workload_conf_id]["maintainer"] = workload_conf["maintainer"]
-                        view_all_arches["workloads"][workload_conf_id]["succeeded"] = True
-                        view_all_arches["workloads"][workload_conf_id]["no_warnings"] = True
-                        # ...
+                        view_all_arches["workloads"][workload_conf_id] = {
+                            "workload_conf_id": workload_conf_id,
+                            "name": workload_conf["name"],
+                            "maintainer": workload_conf["maintainer"],
+                            "succeeded": True,
+                            "no_warnings": True,
+                        }
 
                     if not workload["succeeded"]:
                         view_all_arches["workloads"][workload_conf_id]["succeeded"] = False
@@ -3347,15 +3347,17 @@ class Analyzer:
 
                     # Init
                     if identifier not in view_all_arches[key]:
-                        view_all_arches[key][identifier] = {}
-                        view_all_arches[key][identifier]["name"] = package["name"]
-                        view_all_arches[key][identifier]["placeholder"] = package["placeholder"]
-                        view_all_arches[key][identifier]["source_name"] = package["source_name"]
-                        view_all_arches[key][identifier]["nevrs"] = {}
-                        view_all_arches[key][identifier]["arches"] = set()
-                        view_all_arches[key][identifier]["highest_priority_reponames_per_arch"] = {}
+                        entry = {
+                            "name": package["name"],
+                            "placeholder": package["placeholder"],
+                            "source_name": package["source_name"],
+                            "nevrs": {},
+                            "arches": set(),
+                            "highest_priority_reponames_per_arch": {},
+                        }
+                        view_all_arches[key][identifier] = entry
 
-                        self._init_pkg_or_srpm_relations_fields(view_all_arches[key][identifier], type="rpm")
+                        self._init_pkg_or_srpm_relations_fields(entry, type="rpm")
 
                     if package["nevr"] not in view_all_arches[key][identifier]["nevrs"]:
                         view_all_arches[key][identifier]["nevrs"][package["nevr"]] = set()
@@ -3374,18 +3376,20 @@ class Analyzer:
                     identifier = package["nevr"]
 
                     if identifier not in view_all_arches[key]:
-                        view_all_arches[key][identifier] = {}
-                        view_all_arches[key][identifier]["name"] = package["name"]
-                        view_all_arches[key][identifier]["placeholder"] = package["placeholder"]
-                        view_all_arches[key][identifier]["evr"] = package["evr"]
-                        view_all_arches[key][identifier]["source_name"] = package["source_name"]
-                        view_all_arches[key][identifier]["arches"] = set()
-                        view_all_arches[key][identifier]["arches_arches"] = {}
-                        view_all_arches[key][identifier]["reponame_per_arch"] = {}
-                        view_all_arches[key][identifier]["highest_priority_reponames_per_arch"] = {}
-                        view_all_arches[key][identifier]["category"] = None
+                        entry = {
+                            "name": package["name"],
+                            "placeholder": package["placeholder"],
+                            "evr": package["evr"],
+                            "source_name": package["source_name"],
+                            "arches": set(),
+                            "arches_arches": {},
+                            "reponame_per_arch": {},
+                            "highest_priority_reponames_per_arch": {},
+                            "category": None,
+                        }
+                        view_all_arches[key][identifier] = entry
 
-                        self._init_pkg_or_srpm_relations_fields(view_all_arches[key][identifier], type="rpm")
+                        self._init_pkg_or_srpm_relations_fields(entry, type="rpm")
 
                     view_all_arches[key][identifier]["arches"].add(arch)
                     view_all_arches[key][identifier]["reponame_per_arch"][arch] = package["reponame"]
@@ -3405,20 +3409,22 @@ class Analyzer:
                     identifier = package["name"]
 
                     if identifier not in view_all_arches[key]:
-                        view_all_arches[key][identifier] = {}
-                        view_all_arches[key][identifier]["name"] = package["name"]
-                        view_all_arches[key][identifier]["placeholder"] = package["placeholder"]
+                        entry = {
+                            "name": package["name"],
+                            "placeholder": package["placeholder"],
+                            "errors": {},
+                            "warnings": {},
+                            "pkg_names": set(),
+                            "pkg_nevrs": set(),
+                            "arches": set(),
+                            "category": None,
+                        }
                         if view_all_arches["has_buildroot"]:
-                            view_all_arches[key][identifier]["buildroot_succeeded"] = True
-                            view_all_arches[key][identifier]["buildroot_no_warnings"] = True
-                        view_all_arches[key][identifier]["errors"] = {}
-                        view_all_arches[key][identifier]["warnings"] = {}
-                        view_all_arches[key][identifier]["pkg_names"] = set()
-                        view_all_arches[key][identifier]["pkg_nevrs"] = set()
-                        view_all_arches[key][identifier]["arches"] = set()
-                        view_all_arches[key][identifier]["category"] = None
+                            entry["buildroot_succeeded"] = True
+                            entry["buildroot_no_warnings"] = True
+                        view_all_arches[key][identifier] = entry
 
-                        self._init_pkg_or_srpm_relations_fields(view_all_arches[key][identifier])
+                        self._init_pkg_or_srpm_relations_fields(entry)
 
                     if view_all_arches["has_buildroot"]:
                         if not self.data["buildroot"]["srpms"][repo_id][arch][package["id"]]["succeeded"]:
