@@ -2835,10 +2835,9 @@ class Analyzer:
         for view_conf_id in self.configs["views"]:
             view_conf = self.configs["views"][view_conf_id]
 
-            if view_conf["type"] == "compose":
-                if view_conf["buildroot_strategy"] == "root_logs":
-                    for arch in view_conf["architectures"]:
-                        self._populate_buildroot_with_view_srpms(view_conf, arch)
+            if view_conf["type"] in ("compose", "addon") and view_conf["buildroot_strategy"] == "root_logs":
+                for arch in view_conf["architectures"]:
+                    self._populate_buildroot_with_view_srpms(view_conf, arch)
 
         # Time to resolve the build groups!
         # This initialises and populates:
@@ -2904,6 +2903,16 @@ class Analyzer:
 
         view = self.data["views"][view_id]
 
+        # De-duplication
+        # For addon views, collect the base view's package IDs to allow
+        # skip packages that are already in the base view.
+        base_view_pkg_ids = set()
+        if view_conf["type"] == "addon":
+            base_view_conf_id = view_conf["base_view_id"]
+            base_view_id = f"{base_view_conf_id}:{arch}"
+            if base_view_id in self.data["views"]:
+                base_view_pkg_ids = set(self.data["views"][base_view_id]["pkgs"].keys())
+
         log("")
         log(f"Adding buildroot to view {view_id}...")
 
@@ -2925,7 +2934,8 @@ class Analyzer:
                 buildroot_srpm = self.data["buildroot"]["srpms"][repo_id][arch][buildroot_srpm_id]
 
                 # Packages in the base buildroot (which would be the environment in workloads)
-                for pkg_id in buildroot_srpm["pkg_env_ids"]:
+                # For addon views, exclude packages already in the base view
+                for pkg_id in set(buildroot_srpm["pkg_env_ids"]) - base_view_pkg_ids:
                     added_pkg_ids.add(pkg_id)
 
                     # Initialise
@@ -2956,7 +2966,8 @@ class Analyzer:
                     view["pkgs"][pkg_id]["supplements"].update(buildroot_srpm["pkg_relations"][pkg_id]["supplements"])
 
                 # Packages needed on top of the base buildroot (required or dependency)
-                for pkg_id in buildroot_srpm["pkg_added_ids"]:
+                # For addon views, exclude packages already in the base view
+                for pkg_id in set(buildroot_srpm["pkg_added_ids"]) - base_view_pkg_ids:
                     added_pkg_ids.add(pkg_id)
 
                     # Initialise
@@ -3034,12 +3045,9 @@ class Analyzer:
         for view_conf_id in self.configs["views"]:
             view_conf = self.configs["views"][view_conf_id]
 
-            if view_conf["type"] == "compose":
-                if view_conf["buildroot_strategy"] == "root_logs":
-                    for arch in view_conf["architectures"]:
-                        self._add_buildroot_to_view(view_conf, arch)
-
-        # And the addon is not supported now
+            if view_conf["type"] in ("compose", "addon") and view_conf["buildroot_strategy"] == "root_logs":
+                for arch in view_conf["architectures"]:
+                    self._add_buildroot_to_view(view_conf, arch)
 
         log("")
         log("  DONE!")
@@ -3276,47 +3284,36 @@ class Analyzer:
             #if view_conf["type"] == "compose":
             if True:
                 repo_id = view_conf["repository"]
+                # has buildroot now checks compose & addon
+                has_buildroot = (view_conf["type"] in ("compose", "addon")
+                                 and view_conf["buildroot_strategy"] == "root_logs")
+                _zero_counts = {
+                    "runtime": 0,
+                    "env": 0,
+                    "req": 0,
+                    "dep": 0,
+                    "build": 0,
+                    "build_base": 0,
+                    "build_level_1": 0,
+                    "build_level_2_plus": 0,
+                }
 
-                view_all_arches = {}
-
-                view_all_arches["id"] = view_conf_id
-                view_all_arches["has_buildroot"] = False
-
-                if view_conf["type"] == "compose":
-                    if view_conf["buildroot_strategy"] == "root_logs":
-                        view_all_arches["has_buildroot"] = True
-                else:
-                    view_all_arches["has_buildroot"] = False
-
-                view_all_arches["everything_succeeded"] = True
-                view_all_arches["no_warnings"] = True
-
-                view_all_arches["workloads"] = {}
-
-                view_all_arches["pkgs_by_name"] = {}
-                view_all_arches["pkgs_by_nevr"] = {}
-
-                view_all_arches["source_pkgs_by_name"] = {}
-
-                view_all_arches["numbers"] = {}
-                view_all_arches["numbers"]["pkgs"] = {}
-                view_all_arches["numbers"]["pkgs"]["runtime"] = 0
-                view_all_arches["numbers"]["pkgs"]["env"] = 0
-                view_all_arches["numbers"]["pkgs"]["req"] = 0
-                view_all_arches["numbers"]["pkgs"]["dep"] = 0
-                view_all_arches["numbers"]["pkgs"]["build"] = 0
-                view_all_arches["numbers"]["pkgs"]["build_base"] = 0
-                view_all_arches["numbers"]["pkgs"]["build_level_1"] = 0
-                view_all_arches["numbers"]["pkgs"]["build_level_2_plus"] = 0
-                view_all_arches["numbers"]["srpms"] = {}
-                view_all_arches["numbers"]["srpms"]["runtime"] = 0
-                view_all_arches["numbers"]["srpms"]["env"] = 0
-                view_all_arches["numbers"]["srpms"]["req"] = 0
-                view_all_arches["numbers"]["srpms"]["dep"] = 0
-                view_all_arches["numbers"]["srpms"]["build"] = 0
-                view_all_arches["numbers"]["srpms"]["build_base"] = 0
-                view_all_arches["numbers"]["srpms"]["build_level_1"] = 0
-                view_all_arches["numbers"]["srpms"]["build_level_2_plus"] = 0
+                view_all_arches = {
+                    "id": view_conf_id,
+                    "has_buildroot": has_buildroot,
+                    "everything_succeeded": True,
+                    "no_warnings": True,
+                    "workloads": {},
+                    "pkgs_by_name": {},
+                    "pkgs_by_nevr": {},
+                    "source_pkgs_by_name": {},
+                    # dict() copies needed so pkgs and srpms don't share the same object
+                    # increment in one would affect the other without a ne object
+                    "numbers": {
+                        "pkgs": dict(_zero_counts),
+                        "srpms": dict(_zero_counts),
+                    }
+                }
 
                 for arch in view_conf["architectures"]:
                     view_id = f"{view_conf_id}:{arch}"
@@ -3589,14 +3586,13 @@ class Analyzer:
         for view_conf_id in self.configs["views"]:
             view_conf = self.configs["views"][view_conf_id]
 
-            if view_conf["type"] == "compose":
-                if view_conf["buildroot_strategy"] == "root_logs":
-                    for arch in view_conf["architectures"]:
+            if view_conf["type"] in ("compose", "addon") and view_conf["buildroot_strategy"] == "root_logs":
+                for arch in view_conf["architectures"]:
 
-                        view_id = f"{view_conf_id}:{arch}"
-                        view = self.data["views"][view_id]
+                    view_id = f"{view_conf_id}:{arch}"
+                    view = self.data["views"][view_id]
 
-                        self._add_unwanted_packages_to_view(view, view_conf)
+                    self._add_unwanted_packages_to_view(view, view_conf)
 
 
     def _recommend_maintainers(self):
@@ -3629,8 +3625,8 @@ class Analyzer:
             view_conf = self.configs["views"][view_conf_id]
             view_all_arches = self.data["views_all_arches"][view_conf_id]
 
-            # Skip addons for now
-            # TODO: Implement support for addons
+            # Skip addons for now (maintainer recommendations not yet supported for addons)
+            # TODO: Implement maintainer recommendations for addon views
             if view_conf["type"] == "addon":
                 continue
 

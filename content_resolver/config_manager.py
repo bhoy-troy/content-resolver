@@ -419,9 +419,9 @@ class ConfigManager:
 
         # Buildroot strategy
         config["buildroot_strategy"] = "none"
-        if "buildroot_strategy" in document["data"]:
-            if str(document["data"]["buildroot_strategy"]) in ["none", "root_logs"]:
-                config["buildroot_strategy"] = str(document["data"]["buildroot_strategy"])
+        buildroot_strategy = document["data"].get("buildroot_strategy")
+        if buildroot_strategy in ["none", "root_logs"]:
+            config["buildroot_strategy"] = buildroot_strategy
 
         # Limit this view only to the following architectures
         config["architectures"] = []
